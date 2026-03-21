@@ -1,0 +1,46 @@
+{
+  "name": "besa-studio-foundation",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "prebuild": "node scripts/prepare-build.mjs",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint . --ext .ts,.tsx",
+    "test:e2e": "node scripts/reset-e2e-store.mjs && playwright test",
+    "test:e2e:deploy-execution": "BESA_E2E_STORE_FIXTURE=deploy-execution-store.json node scripts/reset-e2e-store.mjs && CI=1 BESA_E2E_RUNTIME=start BESA_E2E_DEPLOY_STUB=1 BESA_E2E_DEPLOY_STUB_PORT=4022 VERCEL_TOKEN=phase45-local-deploy-token node scripts/run-e2e-with-servers.mjs e2e/deploy-execution.spec.ts",
+    "test:e2e:deploy-execution:live-smoke": "node scripts/assert-live-deploy-execution-e2e-env.mjs && CI=1 BESA_E2E_RUNTIME=start BESA_E2E_DEPLOY_MODE=live node scripts/run-e2e-with-servers.mjs e2e/deploy-execution-live-smoke.spec.ts",
+    "test:e2e:supabase:deploy-execution": "node scripts/assert-supabase-deploy-execution-e2e-env.mjs && CI=1 BESA_E2E_MODE=supabase BESA_E2E_DEPLOY_STUB=1 BESA_E2E_DEPLOY_STUB_PORT=4022 node scripts/run-e2e-with-servers.mjs e2e/supabase-deploy-execution-parity.spec.ts",
+    "test:e2e:provider-live-smoke": "node scripts/assert-live-provider-e2e-env.mjs && BESA_E2E_PROVIDER_MODE=live playwright test e2e/live-provider-smoke.spec.ts",
+    "test:e2e:supabase": "node scripts/assert-supabase-e2e-env.mjs && BESA_E2E_MODE=supabase playwright test e2e/supabase-parity.spec.ts",
+    "test:e2e:supabase:provider": "node scripts/assert-supabase-provider-e2e-env.mjs && BESA_E2E_MODE=supabase playwright test e2e/supabase-provider-parity.spec.ts",
+    "verify:critical": "npm run lint && npm run build && npm run test:e2e",
+    "verify:deploy-execution": "npm run lint && npm run build && npm run test:e2e:deploy-execution",
+    "verify:deploy-execution:live-smoke": "npm run lint && npm run build && npm run test:e2e:deploy-execution:live-smoke",
+    "verify:deploy-execution:supabase": "npm run lint && npm run build && npm run test:e2e:supabase:deploy-execution",
+    "verify:provider-live-smoke": "npm run lint && npm run build && npm run test:e2e:provider-live-smoke",
+    "verify:critical:supabase": "npm run lint && npm run build && npm run test:e2e:supabase",
+    "verify:provider:supabase": "npm run lint && npm run build && npm run test:e2e:supabase:provider"
+  },
+  "dependencies": {
+    "@fontsource/manrope": "^5.2.7",
+    "@fontsource/space-grotesk": "^5.2.6",
+    "@supabase/supabase-js": "^2.57.4",
+    "next": "^15.5.3",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "autoprefixer": "^10.4.21",
+    "eslint": "^9.34.0",
+    "eslint-config-next": "^15.5.3",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.9.2"
+  }
+}

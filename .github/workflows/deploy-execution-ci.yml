@@ -1,0 +1,239 @@
+name: Deploy Execution CI
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+jobs:
+  deploy-execution-local-stub:
+    name: Deploy execution (local stub)
+    runs-on: ubuntu-latest
+    env:
+      BESA_E2E_OUTPUT_DIR: .artifacts/deploy-execution-local-stub/test-results
+      BESA_E2E_HTML_REPORT_DIR: .artifacts/deploy-execution-local-stub/playwright-report
+      BESA_E2E_LOG_DIR: .artifacts/deploy-execution-local-stub/logs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run focused deploy execution verification
+        run: npm run verify:deploy-execution
+
+      - name: Upload Playwright report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        id: upload_local_stub_report
+        with:
+          name: deploy-execution-local-stub-playwright-report
+          if-no-files-found: ignore
+          path: .artifacts/deploy-execution-local-stub/playwright-report
+
+      - name: Upload test-results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        id: upload_local_stub_results
+        with:
+          name: deploy-execution-local-stub-test-results
+          if-no-files-found: ignore
+          path: .artifacts/deploy-execution-local-stub/test-results
+
+      - name: Upload wrapper and server logs artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        id: upload_local_stub_logs
+        with:
+          name: deploy-execution-local-stub-wrapper-logs
+          if-no-files-found: ignore
+          path: .artifacts/deploy-execution-local-stub/logs
+
+      - name: Write deploy execution job summary
+        if: always()
+        env:
+          BESA_CI_JOB_LABEL: Deploy execution (local stub)
+          BESA_CI_JOB_STATUS: ${{ job.status }}
+          BESA_CI_SECRET_GATED: "0"
+          BESA_CI_VERIFICATION_COMMAND: npm run verify:deploy-execution
+          BESA_CI_REPORT_ARTIFACT_NAME: deploy-execution-local-stub-playwright-report
+          BESA_CI_REPORT_ARTIFACT_URL: ${{ steps.upload_local_stub_report.outputs.artifact-url }}
+          BESA_CI_TEST_RESULTS_ARTIFACT_NAME: deploy-execution-local-stub-test-results
+          BESA_CI_TEST_RESULTS_ARTIFACT_URL: ${{ steps.upload_local_stub_results.outputs.artifact-url }}
+          BESA_CI_LOG_ARTIFACT_NAME: deploy-execution-local-stub-wrapper-logs
+          BESA_CI_LOG_ARTIFACT_URL: ${{ steps.upload_local_stub_logs.outputs.artifact-url }}
+          BESA_CI_REPORT_PATH: .artifacts/deploy-execution-local-stub/playwright-report
+          BESA_CI_TEST_RESULTS_PATH: .artifacts/deploy-execution-local-stub/test-results
+          BESA_CI_LOG_PATH: .artifacts/deploy-execution-local-stub/logs
+        run: node scripts/write-deploy-e2e-summary.mjs
+
+  deploy-execution-live-smoke:
+    name: Deploy execution (live smoke)
+    needs: deploy-execution-local-stub
+    if: ${{ secrets.VERCEL_TOKEN != '' && secrets.BESA_E2E_LIVE_DEPLOY_PROJECT_NAME != '' }}
+    runs-on: ubuntu-latest
+    env:
+      BESA_E2E_RUNTIME: start
+      BESA_E2E_DEPLOY_MODE: live
+      BESA_E2E_OUTPUT_DIR: .artifacts/deploy-execution-live-smoke/test-results
+      BESA_E2E_HTML_REPORT_DIR: .artifacts/deploy-execution-live-smoke/playwright-report
+      BESA_E2E_LOG_DIR: .artifacts/deploy-execution-live-smoke/logs
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      BESA_E2E_LIVE_DEPLOY_PROJECT_NAME: ${{ secrets.BESA_E2E_LIVE_DEPLOY_PROJECT_NAME }}
+      BESA_E2E_LIVE_DEPLOY_TEAM_ID: ${{ secrets.BESA_E2E_LIVE_DEPLOY_TEAM_ID }}
+      BESA_E2E_LIVE_DEPLOY_TEAM_SLUG: ${{ secrets.BESA_E2E_LIVE_DEPLOY_TEAM_SLUG }}
+      BESA_E2E_LIVE_DEPLOY_TARGET: ${{ secrets.BESA_E2E_LIVE_DEPLOY_TARGET }}
+      BESA_E2E_LIVE_DEPLOY_API_BASE_URL: ${{ secrets.BESA_E2E_LIVE_DEPLOY_API_BASE_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run live deploy execution smoke verification
+        run: npm run verify:deploy-execution:live-smoke
+
+      - name: Upload Playwright report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        id: upload_live_smoke_report
+        with:
+          name: deploy-execution-live-smoke-playwright-report
+          if-no-files-found: ignore
+          path: .artifacts/deploy-execution-live-smoke/playwright-report
+
+      - name: Upload test-results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        id: upload_live_smoke_results
+        with:
+          name: deploy-execution-live-smoke-test-results
+          if-no-files-found: ignore
+          path: .artifacts/deploy-execution-live-smoke/test-results
+
+      - name: Upload wrapper and server logs artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        id: upload_live_smoke_logs
+        with:
+          name: deploy-execution-live-smoke-wrapper-logs
+          if-no-files-found: ignore
+          path: .artifacts/deploy-execution-live-smoke/logs
+
+      - name: Write deploy execution job summary
+        if: always()
+        env:
+          BESA_CI_JOB_LABEL: Deploy execution (live smoke)
+          BESA_CI_JOB_STATUS: ${{ job.status }}
+          BESA_CI_SECRET_GATED: "1"
+          BESA_CI_VERIFICATION_COMMAND: npm run verify:deploy-execution:live-smoke
+          BESA_CI_REPORT_ARTIFACT_NAME: deploy-execution-live-smoke-playwright-report
+          BESA_CI_REPORT_ARTIFACT_URL: ${{ steps.upload_live_smoke_report.outputs.artifact-url }}
+          BESA_CI_TEST_RESULTS_ARTIFACT_NAME: deploy-execution-live-smoke-test-results
+          BESA_CI_TEST_RESULTS_ARTIFACT_URL: ${{ steps.upload_live_smoke_results.outputs.artifact-url }}
+          BESA_CI_LOG_ARTIFACT_NAME: deploy-execution-live-smoke-wrapper-logs
+          BESA_CI_LOG_ARTIFACT_URL: ${{ steps.upload_live_smoke_logs.outputs.artifact-url }}
+          BESA_CI_REPORT_PATH: .artifacts/deploy-execution-live-smoke/playwright-report
+          BESA_CI_TEST_RESULTS_PATH: .artifacts/deploy-execution-live-smoke/test-results
+          BESA_CI_LOG_PATH: .artifacts/deploy-execution-live-smoke/logs
+        run: node scripts/write-deploy-e2e-summary.mjs
+
+  deploy-execution-supabase-parity:
+    name: Deploy execution (Supabase parity)
+    needs: deploy-execution-local-stub
+    if: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL != '' && secrets.SUPABASE_SERVICE_ROLE_KEY != '' && secrets.BESA_E2E_SUPABASE_OWNER_EMAIL != '' && secrets.BESA_E2E_SUPABASE_OWNER_PASSWORD != '' && secrets.BESA_E2E_SUPABASE_WORKSPACE_SLUG != '' && secrets.BESA_E2E_SUPABASE_PROJECT_SLUG != '' }}
+    runs-on: ubuntu-latest
+    env:
+      BESA_E2E_OUTPUT_DIR: .artifacts/deploy-execution-supabase-parity/test-results
+      BESA_E2E_HTML_REPORT_DIR: .artifacts/deploy-execution-supabase-parity/playwright-report
+      BESA_E2E_LOG_DIR: .artifacts/deploy-execution-supabase-parity/logs
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      BESA_E2E_SUPABASE_OWNER_EMAIL: ${{ secrets.BESA_E2E_SUPABASE_OWNER_EMAIL }}
+      BESA_E2E_SUPABASE_OWNER_PASSWORD: ${{ secrets.BESA_E2E_SUPABASE_OWNER_PASSWORD }}
+      BESA_E2E_SUPABASE_WORKSPACE_SLUG: ${{ secrets.BESA_E2E_SUPABASE_WORKSPACE_SLUG }}
+      BESA_E2E_SUPABASE_PROJECT_SLUG: ${{ secrets.BESA_E2E_SUPABASE_PROJECT_SLUG }}
+      BESA_E2E_SUPABASE_LOCALE: ${{ secrets.BESA_E2E_SUPABASE_LOCALE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Supabase deploy execution parity verification
+        run: npm run verify:deploy-execution:supabase
+
+      - name: Upload Playwright report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        id: upload_supabase_parity_report
+        with:
+          name: deploy-execution-supabase-parity-playwright-report
+          if-no-files-found: ignore
+          path: .artifacts/deploy-execution-supabase-parity/playwright-report
+
+      - name: Upload test-results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        id: upload_supabase_parity_results
+        with:
+          name: deploy-execution-supabase-parity-test-results
+          if-no-files-found: ignore
+          path: .artifacts/deploy-execution-supabase-parity/test-results
+
+      - name: Upload wrapper and server logs artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        id: upload_supabase_parity_logs
+        with:
+          name: deploy-execution-supabase-parity-wrapper-logs
+          if-no-files-found: ignore
+          path: .artifacts/deploy-execution-supabase-parity/logs
+
+      - name: Write deploy execution job summary
+        if: always()
+        env:
+          BESA_CI_JOB_LABEL: Deploy execution (Supabase parity)
+          BESA_CI_JOB_STATUS: ${{ job.status }}
+          BESA_CI_SECRET_GATED: "1"
+          BESA_CI_VERIFICATION_COMMAND: npm run verify:deploy-execution:supabase
+          BESA_CI_REPORT_ARTIFACT_NAME: deploy-execution-supabase-parity-playwright-report
+          BESA_CI_REPORT_ARTIFACT_URL: ${{ steps.upload_supabase_parity_report.outputs.artifact-url }}
+          BESA_CI_TEST_RESULTS_ARTIFACT_NAME: deploy-execution-supabase-parity-test-results
+          BESA_CI_TEST_RESULTS_ARTIFACT_URL: ${{ steps.upload_supabase_parity_results.outputs.artifact-url }}
+          BESA_CI_LOG_ARTIFACT_NAME: deploy-execution-supabase-parity-wrapper-logs
+          BESA_CI_LOG_ARTIFACT_URL: ${{ steps.upload_supabase_parity_logs.outputs.artifact-url }}
+          BESA_CI_REPORT_PATH: .artifacts/deploy-execution-supabase-parity/playwright-report
+          BESA_CI_TEST_RESULTS_PATH: .artifacts/deploy-execution-supabase-parity/test-results
+          BESA_CI_LOG_PATH: .artifacts/deploy-execution-supabase-parity/logs
+        run: node scripts/write-deploy-e2e-summary.mjs

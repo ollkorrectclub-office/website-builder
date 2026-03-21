@@ -1,0 +1,79 @@
+@import "@fontsource/manrope/400.css";
+@import "@fontsource/manrope/500.css";
+@import "@fontsource/manrope/600.css";
+@import "@fontsource/manrope/700.css";
+@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/space-grotesk/700.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 34 80% 98%;
+  --foreground: 220 32% 12%;
+  --muted: 32 42% 92%;
+  --muted-foreground: 220 10% 42%;
+  --border: 28 26% 85%;
+  --card: 0 0% 100%;
+  --card-foreground: 220 32% 12%;
+  --primary: 6 73% 48%;
+  --primary-foreground: 34 100% 98%;
+  --secondary: 33 51% 93%;
+  --secondary-foreground: 220 32% 12%;
+  --accent: 39 72% 58%;
+  --accent-foreground: 220 32% 12%;
+  --ring: 6 73% 48%;
+}
+
+html[data-theme="dark"] {
+  --background: 222 30% 9%;
+  --foreground: 34 55% 96%;
+  --muted: 218 22% 15%;
+  --muted-foreground: 219 12% 70%;
+  --border: 218 16% 20%;
+  --card: 220 24% 12%;
+  --card-foreground: 34 55% 96%;
+  --primary: 11 80% 61%;
+  --primary-foreground: 220 33% 10%;
+  --secondary: 218 22% 15%;
+  --secondary-foreground: 34 55% 96%;
+  --accent: 41 72% 57%;
+  --accent-foreground: 220 33% 10%;
+  --ring: 11 80% 61%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  color: hsl(var(--foreground));
+  font-family: Manrope, ui-sans-serif, system-ui, sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(227, 84, 59, 0.14), transparent 26%),
+    radial-gradient(circle at 85% 8%, rgba(232, 182, 73, 0.16), transparent 20%),
+    linear-gradient(180deg, rgba(255, 250, 244, 1) 0%, rgba(250, 244, 236, 1) 100%);
+}
+
+html[data-theme="dark"] body {
+  background:
+    radial-gradient(circle at top left, rgba(227, 84, 59, 0.14), transparent 26%),
+    radial-gradient(circle at 85% 8%, rgba(232, 182, 73, 0.12), transparent 20%),
+    linear-gradient(180deg, rgba(11, 16, 29, 1) 0%, rgba(14, 20, 35, 1) 100%);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: rgba(217, 92, 69, 0.22);
+}

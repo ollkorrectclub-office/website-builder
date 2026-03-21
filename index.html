@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="sq">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Besa Studio | Dashboard për Shqipëri dhe Kosovë</title>
+    <meta
+      name="description"
+      content="Dashboard për krijimin e faqeve moderne për tregun shqiptar dhe kosovar."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body data-market="al">
+    <div class="background-grid"></div>
+    <div class="glow glow-one"></div>
+    <div class="glow glow-two"></div>
+
+    <div class="shell">
+      <aside class="sidebar reveal" style="--delay: 0.05s">
+        <div class="brand">
+          <div class="brand-mark">B</div>
+          <div>
+            <p class="brand-kicker">Besa Studio</p>
+            <h2>Build local. Launch fast.</h2>
+          </div>
+        </div>
+
+        <button class="primary primary-full">
+          <span>+</span>
+          Projekt i ri
+        </button>
+
+        <nav class="nav">
+          <a class="nav-item active" href="#overview">Overview</a>
+          <a class="nav-item" href="#projects">Projektet</a>
+          <a class="nav-item" href="#templates">Templates</a>
+          <a class="nav-item" href="#signals">Sinjalet</a>
+          <a class="nav-item" href="#launch">Launch</a>
+        </nav>
+
+        <div class="sidebar-card">
+          <p class="mini-label">Tregu aktiv</p>
+          <h3 id="sidebar-market-title">Shqipëri</h3>
+          <p id="sidebar-market-copy">
+            Fokus te turizmi, gastronomia dhe shërbimet me WhatsApp-first funnel.
+          </p>
+          <div class="sidebar-metrics">
+            <div>
+              <span>Leads</span>
+              <strong id="sidebar-leads">14</strong>
+            </div>
+            <div>
+              <span>Mesatarja</span>
+              <strong id="sidebar-build-time">4.2 ditë</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-note">
+          <p class="mini-label">Go-to-market</p>
+          <p>
+            Përdor copy në shqip, pagesa në lek ose euro dhe CTA të qarta për
+            telefon/WhatsApp.
+          </p>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar reveal" style="--delay: 0.1s">
+          <div class="workspace-meta">
+            <p class="eyebrow">Dashboard i krijimit</p>
+            <h1 id="overview">Website builder për Shqipëri dhe Kosovë</h1>
+          </div>
+
+          <div class="topbar-actions">
+            <div class="switcher" aria-label="Market selector">
+              <button class="market-button active" data-market="al">Shqipëri</button>
+              <button class="market-button" data-market="xk">Kosovë</button>
+            </div>
+            <div class="status-pill">Beta private</div>
+          </div>
+        </header>
+
+        <section class="hero panel reveal" style="--delay: 0.15s">
+          <div class="hero-copy">
+            <p class="eyebrow">Frymëzuar nga Lovable, ndërtuar për tregun lokal</p>
+            <h2>
+              Gjenero landing pages, website-e shërbimesh dhe flukse launch-i
+              me ritmin e një studioje moderne.
+            </h2>
+            <p class="hero-text">
+              I njëjti sens i shpejtësisë si një AI builder modern, por me
+              template-e, ton komunikimi dhe prioritete të qarta për Tiranë,
+              Prishtinë, Durrës, Gjilan dhe më gjerë.
+            </p>
+
+            <div class="hero-actions">
+              <button class="primary" id="generate-brief">Krijo koncept</button>
+              <button class="secondary">Shih planin Pro</button>
+            </div>
+
+            <div class="hero-highlights">
+              <article>
+                <span>Multi-market</span>
+                <strong id="hero-highlight-market">Copy + pagesa + oferta lokale</strong>
+              </article>
+              <article>
+                <span>Fast launch</span>
+                <strong id="hero-highlight-speed">MVP brenda 4.2 ditësh</strong>
+              </article>
+            </div>
+          </div>
+
+          <div class="composer-card">
+            <div class="composer-header">
+              <div>
+                <p class="mini-label">Prompt composer</p>
+                <h3>Brief i gjeneruar për klientë lokalë</h3>
+              </div>
+              <span class="composer-badge" id="composer-market-badge">AL</span>
+            </div>
+
+            <label class="composer-label" for="prompt-input">
+              Përshkruaj biznesin dhe tonin që do
+            </label>
+            <textarea id="prompt-input">
+Krijo një landing page premium për një klinikë dentare në Tiranë me seksion për ofertat, WhatsApp CTA dhe formë rezervimi.
+            </textarea>
+
+            <div class="chip-row" id="prompt-chips"></div>
+
+            <div class="composer-footer">
+              <div class="prompt-meta" id="prompt-meta">
+                Gjuha: Shqip | CTA: WhatsApp | Fokus: konvertime lokale
+              </div>
+              <button class="primary primary-tight" id="generate-project">
+                Gjenero projekt
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="stats-grid reveal" style="--delay: 0.2s">
+          <article class="stat-card panel">
+            <p class="mini-label">Pipeline i javës</p>
+            <strong class="stat-number" id="stat-pipeline">14</strong>
+            <span class="stat-copy" id="stat-pipeline-copy">leads të ngrohta nga turizëm + gastronomi</span>
+          </article>
+          <article class="stat-card panel">
+            <p class="mini-label">Shpejtësia e build-it</p>
+            <strong class="stat-number" id="stat-build">4.2</strong>
+            <span class="stat-copy">ditë nga brief në publish</span>
+          </article>
+          <article class="stat-card panel">
+            <p class="mini-label">Mënyra e pagesës</p>
+            <strong class="stat-number" id="stat-payment">Lek / EUR</strong>
+            <span class="stat-copy">paketa fikse + retainer mujor</span>
+          </article>
+          <article class="stat-card panel">
+            <p class="mini-label">Sektori dominant</p>
+            <strong class="stat-number" id="stat-sector">Turizëm</strong>
+            <span class="stat-copy" id="stat-sector-copy">apartmente, hotele dhe restorante</span>
+          </article>
+        </section>
+
+        <section class="content-grid">
+          <section class="panel reveal" style="--delay: 0.25s">
+            <div class="section-header">
+              <div>
+                <p class="mini-label">Projektet</p>
+                <h2 id="projects">Aktive tani</h2>
+              </div>
+              <a class="text-link" href="#templates">Shih templates</a>
+            </div>
+            <div class="projects-grid" id="projects-grid"></div>
+          </section>
+
+          <aside class="panel rail reveal" id="signals" style="--delay: 0.3s">
+            <div class="section-header">
+              <div>
+                <p class="mini-label">Pulse e tregut</p>
+                <h2>Çfarë po kërkojnë klientët</h2>
+              </div>
+            </div>
+
+            <div class="signal-stack" id="signal-stack"></div>
+
+            <div class="launch-card" id="launch">
+              <p class="mini-label">Launch checklist</p>
+              <ul class="checklist" id="launch-checklist"></ul>
+            </div>
+          </aside>
+        </section>
+
+        <section class="lower-grid">
+          <section class="panel reveal" id="templates" style="--delay: 0.35s">
+            <div class="section-header">
+              <div>
+                <p class="mini-label">Templates</p>
+                <h2>Formate që shesin në tregun lokal</h2>
+              </div>
+              <span class="muted-pill">Mobile-first</span>
+            </div>
+            <div class="template-grid" id="template-grid"></div>
+          </section>
+
+          <section class="panel reveal" style="--delay: 0.4s">
+            <div class="section-header">
+              <div>
+                <p class="mini-label">Momentum</p>
+                <h2>Kanale që po performojnë</h2>
+              </div>
+            </div>
+
+            <div class="chart" id="channel-chart"></div>
+
+            <div class="activity-card">
+              <p class="mini-label">Aktiviteti i fundit</p>
+              <div class="activity-feed" id="activity-feed"></div>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>

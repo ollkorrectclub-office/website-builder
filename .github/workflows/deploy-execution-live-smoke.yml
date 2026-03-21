@@ -1,0 +1,84 @@
+name: Deploy Execution Live Smoke
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  deploy-execution-live-smoke:
+    runs-on: ubuntu-latest
+    env:
+      BESA_E2E_RUNTIME: start
+      BESA_E2E_DEPLOY_MODE: live
+      BESA_E2E_OUTPUT_DIR: .artifacts/deploy-execution-live-smoke/test-results
+      BESA_E2E_HTML_REPORT_DIR: .artifacts/deploy-execution-live-smoke/playwright-report
+      BESA_E2E_LOG_DIR: .artifacts/deploy-execution-live-smoke/logs
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      BESA_E2E_LIVE_DEPLOY_PROJECT_NAME: ${{ secrets.BESA_E2E_LIVE_DEPLOY_PROJECT_NAME }}
+      BESA_E2E_LIVE_DEPLOY_TEAM_ID: ${{ secrets.BESA_E2E_LIVE_DEPLOY_TEAM_ID }}
+      BESA_E2E_LIVE_DEPLOY_TEAM_SLUG: ${{ secrets.BESA_E2E_LIVE_DEPLOY_TEAM_SLUG }}
+      BESA_E2E_LIVE_DEPLOY_TARGET: ${{ secrets.BESA_E2E_LIVE_DEPLOY_TARGET }}
+      BESA_E2E_LIVE_DEPLOY_API_BASE_URL: ${{ secrets.BESA_E2E_LIVE_DEPLOY_API_BASE_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run env-gated live deploy execution smoke verification
+        run: npm run verify:deploy-execution:live-smoke
+
+      - name: Upload Playwright report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        id: upload_live_smoke_report
+        with:
+          name: deploy-execution-live-smoke-playwright-report
+          if-no-files-found: ignore
+          path: .artifacts/deploy-execution-live-smoke/playwright-report
+
+      - name: Upload test-results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        id: upload_live_smoke_results
+        with:
+          name: deploy-execution-live-smoke-test-results
+          if-no-files-found: ignore
+          path: .artifacts/deploy-execution-live-smoke/test-results
+
+      - name: Upload wrapper and server logs artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        id: upload_live_smoke_logs
+        with:
+          name: deploy-execution-live-smoke-wrapper-logs
+          if-no-files-found: ignore
+          path: .artifacts/deploy-execution-live-smoke/logs
+
+      - name: Write deploy execution job summary
+        if: always()
+        env:
+          BESA_CI_JOB_LABEL: Deploy execution (live smoke)
+          BESA_CI_JOB_STATUS: ${{ job.status }}
+          BESA_CI_SECRET_GATED: "1"
+          BESA_CI_VERIFICATION_COMMAND: npm run verify:deploy-execution:live-smoke
+          BESA_CI_REPORT_ARTIFACT_NAME: deploy-execution-live-smoke-playwright-report
+          BESA_CI_REPORT_ARTIFACT_URL: ${{ steps.upload_live_smoke_report.outputs.artifact-url }}
+          BESA_CI_TEST_RESULTS_ARTIFACT_NAME: deploy-execution-live-smoke-test-results
+          BESA_CI_TEST_RESULTS_ARTIFACT_URL: ${{ steps.upload_live_smoke_results.outputs.artifact-url }}
+          BESA_CI_LOG_ARTIFACT_NAME: deploy-execution-live-smoke-wrapper-logs
+          BESA_CI_LOG_ARTIFACT_URL: ${{ steps.upload_live_smoke_logs.outputs.artifact-url }}
+          BESA_CI_REPORT_PATH: .artifacts/deploy-execution-live-smoke/playwright-report
+          BESA_CI_TEST_RESULTS_PATH: .artifacts/deploy-execution-live-smoke/test-results
+          BESA_CI_LOG_PATH: .artifacts/deploy-execution-live-smoke/logs
+        run: node scripts/write-deploy-e2e-summary.mjs

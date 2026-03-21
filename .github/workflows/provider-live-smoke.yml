@@ -1,0 +1,30 @@
+name: Provider Live Smoke
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  provider-live-smoke:
+    runs-on: ubuntu-latest
+    env:
+      BESA_E2E_RUNTIME: dev
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run env-gated live smoke verification
+        run: npm run verify:provider-live-smoke

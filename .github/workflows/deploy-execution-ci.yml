@@ -6,6 +6,40 @@ on:
   workflow_dispatch:
 
 jobs:
+  deploy-execution-secret-gates:
+    name: Resolve deploy execution secret gates
+    runs-on: ubuntu-latest
+    outputs:
+      live_smoke_enabled: ${{ steps.resolve.outputs.live_smoke_enabled }}
+      supabase_parity_enabled: ${{ steps.resolve.outputs.supabase_parity_enabled }}
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      BESA_E2E_LIVE_DEPLOY_PROJECT_NAME: ${{ secrets.BESA_E2E_LIVE_DEPLOY_PROJECT_NAME }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      BESA_E2E_SUPABASE_OWNER_EMAIL: ${{ secrets.BESA_E2E_SUPABASE_OWNER_EMAIL }}
+      BESA_E2E_SUPABASE_OWNER_PASSWORD: ${{ secrets.BESA_E2E_SUPABASE_OWNER_PASSWORD }}
+      BESA_E2E_SUPABASE_WORKSPACE_SLUG: ${{ secrets.BESA_E2E_SUPABASE_WORKSPACE_SLUG }}
+      BESA_E2E_SUPABASE_PROJECT_SLUG: ${{ secrets.BESA_E2E_SUPABASE_PROJECT_SLUG }}
+    steps:
+      - name: Resolve secret-gated deploy jobs
+        id: resolve
+        shell: bash
+        run: |
+          live_smoke_enabled=false
+          supabase_parity_enabled=false
+
+          if [[ -n "${VERCEL_TOKEN}" && -n "${BESA_E2E_LIVE_DEPLOY_PROJECT_NAME}" ]]; then
+            live_smoke_enabled=true
+          fi
+
+          if [[ -n "${NEXT_PUBLIC_SUPABASE_URL}" && -n "${SUPABASE_SERVICE_ROLE_KEY}" && -n "${BESA_E2E_SUPABASE_OWNER_EMAIL}" && -n "${BESA_E2E_SUPABASE_OWNER_PASSWORD}" && -n "${BESA_E2E_SUPABASE_WORKSPACE_SLUG}" && -n "${BESA_E2E_SUPABASE_PROJECT_SLUG}" ]]; then
+            supabase_parity_enabled=true
+          fi
+
+          echo "live_smoke_enabled=${live_smoke_enabled}" >> "${GITHUB_OUTPUT}"
+          echo "supabase_parity_enabled=${supabase_parity_enabled}" >> "${GITHUB_OUTPUT}"
+
   deploy-execution-local-stub:
     name: Deploy execution (local stub)
     runs-on: ubuntu-latest
@@ -79,8 +113,10 @@ jobs:
 
   deploy-execution-live-smoke:
     name: Deploy execution (live smoke)
-    needs: deploy-execution-local-stub
-    if: ${{ secrets.VERCEL_TOKEN != '' && secrets.BESA_E2E_LIVE_DEPLOY_PROJECT_NAME != '' }}
+    needs:
+      - deploy-execution-local-stub
+      - deploy-execution-secret-gates
+    if: ${{ needs.deploy-execution-secret-gates.outputs.live_smoke_enabled == 'true' }}
     runs-on: ubuntu-latest
     env:
       BESA_E2E_RUNTIME: start
@@ -160,8 +196,10 @@ jobs:
 
   deploy-execution-supabase-parity:
     name: Deploy execution (Supabase parity)
-    needs: deploy-execution-local-stub
-    if: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL != '' && secrets.SUPABASE_SERVICE_ROLE_KEY != '' && secrets.BESA_E2E_SUPABASE_OWNER_EMAIL != '' && secrets.BESA_E2E_SUPABASE_OWNER_PASSWORD != '' && secrets.BESA_E2E_SUPABASE_WORKSPACE_SLUG != '' && secrets.BESA_E2E_SUPABASE_PROJECT_SLUG != '' }}
+    needs:
+      - deploy-execution-local-stub
+      - deploy-execution-secret-gates
+    if: ${{ needs.deploy-execution-secret-gates.outputs.supabase_parity_enabled == 'true' }}
     runs-on: ubuntu-latest
     env:
       BESA_E2E_OUTPUT_DIR: .artifacts/deploy-execution-supabase-parity/test-results

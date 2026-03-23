@@ -11,6 +11,9 @@ import {
 import {
   addWorkspaceMemberAction,
   deactivateWorkspaceMemberAction,
+  reactivateWorkspaceMemberAction,
+  resendWorkspaceInvitationAction,
+  revokeWorkspaceInvitationAction,
   transferWorkspaceOwnershipAction,
   updateWorkspaceMemberRoleAction,
 } from "@/lib/workspaces/actions";
@@ -42,6 +45,9 @@ export default async function WorkspacePage({
       inviteMemberAction={addWorkspaceMemberAction.bind(null, locale, workspace.slug)}
       updateMemberRoleAction={updateWorkspaceMemberRoleAction.bind(null, locale, workspace.slug)}
       deactivateMemberAction={deactivateWorkspaceMemberAction.bind(null, locale, workspace.slug)}
+      reactivateMemberAction={reactivateWorkspaceMemberAction.bind(null, locale, workspace.slug)}
+      revokeInvitationAction={revokeWorkspaceInvitationAction.bind(null, locale, workspace.slug)}
+      resendInvitationAction={resendWorkspaceInvitationAction.bind(null, locale, workspace.slug)}
       transferOwnerAction={transferWorkspaceOwnershipAction.bind(null, locale, workspace.slug)}
     />
   );

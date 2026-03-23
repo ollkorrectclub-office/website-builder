@@ -1,0 +1,119 @@
+import { expect, test, type Browser, type Page } from "@playwright/test";
+
+import { e2eLocale, e2eWorkspaceSlug, isSupabaseE2EMode } from "./support/env";
+
+const workspaceManagePath = `/${e2eLocale}/app/workspaces/${e2eWorkspaceSlug}`;
+const ownerEmail = process.env.BESA_E2E_SUPABASE_OWNER_EMAIL ?? "";
+const ownerPassword = process.env.BESA_E2E_SUPABASE_OWNER_PASSWORD ?? "";
+
+function inviteeIdentity() {
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  return {
+    email: `phase51-supabase-${suffix}@besa-e2e.test`,
+    fullName: "Phase 51 Supabase Invitee",
+    password: "phase51-supabase-pass",
+  };
+}
+
+async function login(page: Page, email: string, password: string, nextPath = workspaceManagePath) {
+  await page.goto(`/${e2eLocale}/login?next=${encodeURIComponent(nextPath)}`);
+  await page.getByTestId("login-email").fill(email);
+  await page.getByTestId("login-password").fill(password);
+  await page.getByTestId("login-submit").click();
+  await page.waitForURL(`**${nextPath}`);
+}
+
+async function createInvitation(page: Page, input: { email: string; role: "viewer" | "editor" | "admin" }) {
+  const form = page.getByTestId("workspace-invitation-create-form");
+  await form.locator('input[name="email"]').fill(input.email);
+  await form.locator('select[name="role"]').selectOption(input.role);
+  await page.getByTestId("workspace-invitation-create-submit").click();
+  await page.waitForLoadState("networkidle");
+}
+
+async function firstInvitationRow(page: Page) {
+  const row = page.locator('[data-testid^="workspace-invitation-row-"]').first();
+  await expect(row).toBeVisible();
+  return row;
+}
+
+async function memberRow(page: Page, memberLabel: string) {
+  const row = page
+    .locator('[data-testid^="workspace-member-row-"]')
+    .filter({ hasText: memberLabel })
+    .first();
+  await expect(row).toBeVisible();
+  return row;
+}
+
+async function acceptInvitation(
+  browser: Browser,
+  inviteHref: string,
+  invitee: { email: string; fullName: string; password: string },
+) {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+
+  await page.goto(inviteHref);
+  await page.getByTestId("workspace-invitation-accept-form").locator('input[name="fullName"]').fill(invitee.fullName);
+  await page.getByTestId("workspace-invitation-accept-form").locator('input[name="password"]').fill(invitee.password);
+  await page.getByTestId("workspace-invitation-accept-submit").click();
+  await page.waitForURL(`**${workspaceManagePath}`);
+
+  return { context, page };
+}
+
+test.describe.serial("supabase workspace membership lifecycle", () => {
+  test.skip(!isSupabaseE2EMode(), "This suite only runs when Supabase E2E mode is enabled.");
+
+  test("accepts an invitation and transfers workspace ownership with visible project ownership post-checks", async ({
+    browser,
+    page,
+  }) => {
+    const invitee = inviteeIdentity();
+
+    await login(page, ownerEmail, ownerPassword);
+    await page.goto(workspaceManagePath);
+
+    await createInvitation(page, { email: invitee.email, role: "viewer" });
+    await page.goto(workspaceManagePath);
+
+    const invitationRow = await firstInvitationRow(page);
+    await expect(invitationRow).toContainText(invitee.email);
+    const inviteHref = await invitationRow.locator('[data-testid^="workspace-invitation-link-"]').getAttribute("href");
+
+    if (!inviteHref) {
+      throw new Error("The Supabase invitation row did not expose a link.");
+    }
+
+    const inviteeSession = await acceptInvitation(browser, inviteHref, invitee);
+
+    await page.goto(workspaceManagePath);
+    const inviteeRow = await memberRow(page, invitee.email);
+    const inviteeMembershipTestId = await inviteeRow.getAttribute("data-testid");
+
+    if (!inviteeMembershipTestId) {
+      throw new Error("The accepted Supabase member row did not expose a data-testid.");
+    }
+
+    const inviteeMembershipId = inviteeMembershipTestId.replace("workspace-member-row-", "");
+
+    await page.getByTestId("workspace-owner-transfer-target").selectOption(inviteeMembershipId);
+    await page.getByTestId("workspace-owner-transfer-confirmation").fill(e2eWorkspaceSlug);
+    await page.getByTestId("workspace-owner-transfer-submit").click();
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByTestId("workspace-project-ownership-card")).toContainText(
+      /Different from workspace owner|Ndryshe nga workspace owner/i,
+    );
+
+    await inviteeSession.page.goto(workspaceManagePath);
+    await expect(inviteeSession.page.getByTestId("workspace-owner-transfer-submit")).toBeEnabled();
+    await expect(inviteeSession.page.getByTestId("workspace-project-ownership-card")).toContainText(
+      /Different from workspace owner|Ndryshe nga workspace owner/i,
+    );
+
+    await inviteeSession.context.close();
+  });
+});

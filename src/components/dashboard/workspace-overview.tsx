@@ -30,6 +30,9 @@ export function WorkspaceOverview({
   inviteMemberAction,
   updateMemberRoleAction,
   deactivateMemberAction,
+  reactivateMemberAction,
+  revokeInvitationAction,
+  resendInvitationAction,
   transferOwnerAction,
 }: {
   locale: Locale;
@@ -40,6 +43,9 @@ export function WorkspaceOverview({
   inviteMemberAction: (state: FormState, formData: FormData) => Promise<FormState>;
   updateMemberRoleAction: (state: FormState, formData: FormData) => Promise<FormState>;
   deactivateMemberAction: (state: FormState, formData: FormData) => Promise<FormState>;
+  reactivateMemberAction: (state: FormState, formData: FormData) => Promise<FormState>;
+  revokeInvitationAction: (state: FormState, formData: FormData) => Promise<FormState>;
+  resendInvitationAction: (state: FormState, formData: FormData) => Promise<FormState>;
   transferOwnerAction: (state: FormState, formData: FormData) => Promise<FormState>;
 }) {
   return (
@@ -164,6 +170,9 @@ export function WorkspaceOverview({
         inviteMemberAction={inviteMemberAction}
         updateRoleAction={updateMemberRoleAction}
         deactivateMemberAction={deactivateMemberAction}
+        reactivateMemberAction={reactivateMemberAction}
+        revokeInvitationAction={revokeInvitationAction}
+        resendInvitationAction={resendInvitationAction}
         transferOwnerAction={transferOwnerAction}
       />
     </div>

@@ -337,6 +337,25 @@ async function deactivateWorkspaceMembershipLocal(input: {
   return membership;
 }
 
+async function reactivateWorkspaceMembershipLocal(input: {
+  workspaceId: string;
+  membershipId: string;
+}) {
+  const store = await readLocalStore();
+  const membership = store.workspaceMembers.find(
+    (entry) => entry.workspaceId === input.workspaceId && entry.id === input.membershipId,
+  );
+
+  if (!membership) {
+    throw new Error("Workspace membership not found.");
+  }
+
+  membership.status = "active";
+  membership.updatedAt = nowIso();
+  await writeLocalStore(store);
+  return membership;
+}
+
 async function listWorkspaceInvitationsLocal(workspaceId: string) {
   const store = await readLocalStore();
 
@@ -399,6 +418,24 @@ async function acceptWorkspaceInvitationLocal(input: {
   invitation.acceptedMembershipId = input.acceptedMembershipId;
   invitation.acceptedAt = timestamp;
   invitation.status = "accepted";
+  invitation.updatedAt = timestamp;
+  await writeLocalStore(store);
+  return invitation;
+}
+
+async function revokeWorkspaceInvitationLocal(input: {
+  invitationId: string;
+}) {
+  const store = await readLocalStore();
+  const invitation = store.workspaceInvitations.find((entry) => entry.id === input.invitationId);
+
+  if (!invitation) {
+    throw new Error("Workspace invitation not found.");
+  }
+
+  const timestamp = nowIso();
+  invitation.status = "revoked";
+  invitation.revokedAt = timestamp;
   invitation.updatedAt = timestamp;
   await writeLocalStore(store);
   return invitation;
@@ -773,6 +810,38 @@ async function deactivateWorkspaceMembershipSupabase(input: {
   return mapWorkspaceMemberRow(data as Record<string, unknown>);
 }
 
+async function reactivateWorkspaceMembershipSupabase(input: {
+  workspaceId: string;
+  membershipId: string;
+}) {
+  const client = createSupabaseServerClient();
+
+  if (!client) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const { data, error } = await client
+    .from("workspace_members")
+    .update({
+      status: "active",
+      updated_at: nowIso(),
+    })
+    .eq("workspace_id", input.workspaceId)
+    .eq("id", input.membershipId)
+    .select("*")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    throw new Error("Workspace membership not found.");
+  }
+
+  return mapWorkspaceMemberRow(data as Record<string, unknown>);
+}
+
 async function listWorkspaceInvitationsSupabase(workspaceId: string) {
   const client = createSupabaseServerClient();
 
@@ -866,6 +935,34 @@ async function acceptWorkspaceInvitationSupabase(input: {
       accepted_at: nowIso(),
       status: "accepted",
       updated_at: nowIso(),
+    })
+    .eq("id", input.invitationId)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return mapWorkspaceInvitationRow(data as Record<string, unknown>);
+}
+
+async function revokeWorkspaceInvitationSupabase(input: {
+  invitationId: string;
+}) {
+  const client = createSupabaseServerClient();
+
+  if (!client) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const timestamp = nowIso();
+  const { data, error } = await client
+    .from("workspace_invitations")
+    .update({
+      status: "revoked",
+      revoked_at: timestamp,
+      updated_at: timestamp,
     })
     .eq("id", input.invitationId)
     .select("*")
@@ -1063,6 +1160,17 @@ export async function deactivateWorkspaceMembership(input: {
   return deactivateWorkspaceMembershipLocal(input);
 }
 
+export async function reactivateWorkspaceMembership(input: {
+  workspaceId: string;
+  membershipId: string;
+}) {
+  if (isSupabaseConfigured()) {
+    return reactivateWorkspaceMembershipSupabase(input);
+  }
+
+  return reactivateWorkspaceMembershipLocal(input);
+}
+
 export async function listWorkspaceInvitations(workspaceId: string) {
   if (isSupabaseConfigured()) {
     return listWorkspaceInvitationsSupabase(workspaceId);
@@ -1103,6 +1211,16 @@ export async function acceptWorkspaceInvitation(input: {
   }
 
   return acceptWorkspaceInvitationLocal(input);
+}
+
+export async function revokeWorkspaceInvitation(input: {
+  invitationId: string;
+}) {
+  if (isSupabaseConfigured()) {
+    return revokeWorkspaceInvitationSupabase(input);
+  }
+
+  return revokeWorkspaceInvitationLocal(input);
 }
 
 export async function listWorkspaceMemberEvents(workspaceId: string) {

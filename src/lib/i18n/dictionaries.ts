@@ -201,11 +201,18 @@ export const dictionaries = {
           "Ftesat ruhen si rekorde të qarta lifecycle dhe mund të pranohen nga link-u i tyre i dedikuar.",
         inviteOpenAction: "Hap ftesën",
         inviteAcceptedAt: "Pranuar më",
+        inviteRevokedAt: "Revokuar më",
+        inviteRevokeAction: "Revoko ftesën",
+        inviteRevokingAction: "Po revokohet...",
+        inviteResendAction: "Ridërgo ftesën",
+        inviteResendingAction: "Po ridërgohet...",
         noInvitations: "Nuk ka ende ftesa të ruajtura për këtë workspace.",
         saveRole: "Ruaj rolin",
         savingRole: "Po ruhet roli...",
         deactivateAction: "Çaktivizo anëtarin",
         deactivatingAction: "Po çaktivizohet...",
+        reactivateAction: "Riaktivizo anëtarin",
+        reactivatingAction: "Po riaktivizohet...",
         deactivateHint:
           "Ky anëtar është i çaktivizuar. Historia ruhet, por qasja e tij mbetet e bllokuar.",
         deactivateSelfCopy:
@@ -216,7 +223,7 @@ export const dictionaries = {
           "Roli Owner nuk ndryshohet apo çaktivizohet nga kjo rresht. Përdor kartelën e transferimit të ownership-it më poshtë.",
         transferTitle: "Transfero ownership-in",
         transferCopy:
-          "Vetëm owner-i aktual mund ta transferojë ownership-in. Owner-i i mëparshëm kalon automatikisht në Admin dhe historia ruhet në audit.",
+          "Vetëm owner-i aktual mund ta transferojë ownership-in. Owner-i i mëparshëm kalon automatikisht në Admin, ndërsa project ownership mbetet i dukshëm veçmas në kartelën poshtë.",
         transferTargetLabel: "Owner-i i ri",
         transferConfirmationLabel: "Konfirmo slug-un e workspace-it",
         transferConfirmationHint:
@@ -226,11 +233,24 @@ export const dictionaries = {
         transferReadOnlyCopy:
           "Vetëm owner-i aktual mund ta nisë transferimin e ownership-it.",
         transferSelectPlaceholder: "Zgjidh një anëtar aktiv",
+        projectOwnershipTitle: "Project ownership visibility",
+        projectOwnershipCopy:
+          "Project ownership nuk lëviz automatikisht kur transferohet workspace ownership. Kjo kartelë e bën të dukshme kush shihet si project owner pas çdo transferimi.",
+        projectOwnershipWorkspaceOwner: "Te workspace owner",
+        projectOwnershipOtherOwners: "Te owner të tjerë",
+        projectOwnershipDeactivatedOwners: "Owner të çaktivizuar",
+        projectOwnershipMatches: "Përputhet me workspace owner",
+        projectOwnershipDiffers: "Ndryshe nga workspace owner",
+        projectOwnershipMatchesCopy:
+          "Ky projekt është në pronësi të owner-it aktual të workspace-it.",
+        projectOwnershipDiffersCopy:
+          "Ky projekt ruan owner-in e vet dhe nuk u transferua automatikisht me workspace ownership.",
+        projectOwnershipEmpty: "Nuk ka projekte të ruajtura për këtë workspace.",
         currentUserBadge: "Ti",
         joinedAt: "U bashkua",
         activityTitle: "Aktiviteti i roleve",
         activityCopy:
-          "Ky log ruan ftesat, pranimin, ndryshimet e roleve, çaktivizimet dhe transferimet e ownership-it për këtë workspace.",
+          "Ky log ruan ftesat, ridërgimet, revokimet, pranimin, ndryshimet e roleve, çaktivizimet, riaktivizimet dhe transferimet e ownership-it për këtë workspace.",
         noActivity: "Nuk ka ende ndryshime të ruajtura në ekipin e workspace-it.",
         activityUnknownRole: "rol i panjohur",
       },
@@ -1793,11 +1813,18 @@ export const dictionaries = {
           "Invitations are stored as explicit lifecycle records and can be accepted from their dedicated link.",
         inviteOpenAction: "Open invitation",
         inviteAcceptedAt: "Accepted at",
+        inviteRevokedAt: "Revoked at",
+        inviteRevokeAction: "Revoke invitation",
+        inviteRevokingAction: "Revoking...",
+        inviteResendAction: "Resend invitation",
+        inviteResendingAction: "Resending...",
         noInvitations: "No invitations have been stored for this workspace yet.",
         saveRole: "Save role",
         savingRole: "Saving role...",
         deactivateAction: "Deactivate member",
         deactivatingAction: "Deactivating...",
+        reactivateAction: "Reactivate member",
+        reactivatingAction: "Reactivating...",
         deactivateHint:
           "This member is deactivated. Their history stays visible, but their access remains blocked.",
         deactivateSelfCopy:
@@ -1808,7 +1835,7 @@ export const dictionaries = {
           "The Owner role is not edited or deactivated from this row. Use the ownership transfer card below instead.",
         transferTitle: "Transfer ownership",
         transferCopy:
-          "Only the current owner can transfer ownership. The previous owner is automatically moved to Admin and the audit trail is preserved.",
+          "Only the current owner can transfer ownership. The previous owner is automatically moved to Admin, while project ownership stays visible separately in the card below.",
         transferTargetLabel: "New owner",
         transferConfirmationLabel: "Confirm the workspace slug",
         transferConfirmationHint:
@@ -1818,11 +1845,24 @@ export const dictionaries = {
         transferReadOnlyCopy:
           "Only the current owner can start an ownership transfer.",
         transferSelectPlaceholder: "Choose an active member",
+        projectOwnershipTitle: "Project ownership visibility",
+        projectOwnershipCopy:
+          "Project ownership does not move automatically when workspace ownership changes. This card makes it explicit who is still visible as the owner of each project after a transfer.",
+        projectOwnershipWorkspaceOwner: "Owned by workspace owner",
+        projectOwnershipOtherOwners: "Owned by others",
+        projectOwnershipDeactivatedOwners: "Deactivated owners",
+        projectOwnershipMatches: "Matches workspace owner",
+        projectOwnershipDiffers: "Different from workspace owner",
+        projectOwnershipMatchesCopy:
+          "This project is owned by the current workspace owner.",
+        projectOwnershipDiffersCopy:
+          "This project keeps its own owner and was not automatically transferred with workspace ownership.",
+        projectOwnershipEmpty: "No projects have been stored for this workspace yet.",
         currentUserBadge: "You",
         joinedAt: "Joined",
         activityTitle: "Role activity",
         activityCopy:
-          "This log keeps invitations, acceptances, role changes, deactivations, and ownership transfers for the workspace in a clear audit trail.",
+          "This log keeps invitations, resends, revocations, acceptances, role changes, deactivations, reactivations, and ownership transfers for the workspace in a clear audit trail.",
         noActivity: "No saved team changes yet for this workspace.",
         activityUnknownRole: "unknown role",
       },

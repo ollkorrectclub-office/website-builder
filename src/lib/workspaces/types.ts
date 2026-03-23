@@ -109,7 +109,10 @@ export type WorkspaceMemberEventType =
   | "member_role_changed"
   | "invitation_created"
   | "invitation_accepted"
+  | "invitation_revoked"
+  | "invitation_resent"
   | "member_deactivated"
+  | "member_reactivated"
   | "owner_transferred";
 
 export interface WorkspaceMemberEventRecord {
@@ -133,6 +136,18 @@ export interface WorkspacePermissionsRecord {
   canView: boolean;
   canCreateProject: boolean;
   canManageWorkspace: boolean;
+}
+
+export interface WorkspaceProjectOwnershipVisibilityRecord {
+  projectId: string;
+  projectSlug: string;
+  projectName: string;
+  projectOwnerUserId: string;
+  projectOwnerName: string;
+  projectOwnerEmail: string;
+  projectOwnerWorkspaceRole: WorkspaceRole | null;
+  projectOwnerMembershipStatus: WorkspaceMemberStatus | null;
+  isWorkspaceOwner: boolean;
 }
 
 export interface ProjectPermissionsRecord {
@@ -271,6 +286,7 @@ export interface WorkspaceMemberManagementBundle {
   members: WorkspaceMemberDirectoryEntryRecord[];
   invitations: WorkspaceInvitationRecord[];
   events: WorkspaceMemberEventRecord[];
+  projectOwnerships: WorkspaceProjectOwnershipVisibilityRecord[];
 }
 
 export interface WorkspaceInvitationAcceptanceBundle {

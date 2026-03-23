@@ -21,6 +21,8 @@ import {
   findUserByEmail,
   getWorkspaceMembership,
   listWorkspaceMembers,
+  reactivateWorkspaceMembership,
+  revokeWorkspaceInvitation,
   signInUserWithPassword,
   updateWorkspaceMembershipRole,
 } from "@/lib/auth/repository";
@@ -78,6 +80,7 @@ import type {
   PlanSectionKey,
   ProjectBriefFields,
   ProjectCapabilities,
+  ProjectRecord,
   ProjectType,
   WorkspaceRole,
 } from "@/lib/workspaces/types";
@@ -289,7 +292,10 @@ async function appendWorkspaceLifecycleEvent(input: {
     | "member_role_changed"
     | "invitation_created"
     | "invitation_accepted"
+    | "invitation_revoked"
+    | "invitation_resent"
     | "member_deactivated"
+    | "member_reactivated"
     | "owner_transferred";
   memberEmail: string;
   memberName: string;
@@ -314,6 +320,36 @@ async function appendWorkspaceLifecycleEvent(input: {
     summary: input.summary,
     occurredAt: input.occurredAt ?? new Date().toISOString(),
   });
+}
+
+function buildProjectOwnershipTransferNote(input: {
+  projects: Array<Pick<ProjectRecord, "ownerUserId">>;
+  nextWorkspaceOwnerUserId: string;
+  previousWorkspaceOwnerUserId: string;
+  locale: string;
+}) {
+  const ownedByNextWorkspaceOwner = input.projects.filter(
+    (project) => project.ownerUserId === input.nextWorkspaceOwnerUserId,
+  ).length;
+  const ownedByPreviousWorkspaceOwner = input.projects.filter(
+    (project) => project.ownerUserId === input.previousWorkspaceOwnerUserId,
+  ).length;
+  const ownedByOtherMembers =
+    input.projects.length - ownedByNextWorkspaceOwner - ownedByPreviousWorkspaceOwner;
+
+  if (input.projects.length === 0) {
+    return localized(
+      input.locale,
+      "Ky workspace nuk ka projekte aktive për kontroll të ownership-it.",
+      "This workspace has no active projects to review for ownership visibility.",
+    );
+  }
+
+  return localized(
+    input.locale,
+    `Project ownership mbetet i ndarë nga workspace ownership: ${ownedByNextWorkspaceOwner} projekt(e) te owner-i i ri, ${ownedByPreviousWorkspaceOwner} te owner-i i mëparshëm dhe ${ownedByOtherMembers} te anëtarë të tjerë. Kontrollo kartelën e project ownership visibility më poshtë.`,
+    `Project ownership stays separate from workspace ownership: ${ownedByNextWorkspaceOwner} project(s) owned by the new workspace owner, ${ownedByPreviousWorkspaceOwner} by the previous owner, and ${ownedByOtherMembers} by other members. Review the project ownership visibility card below.`,
+  );
 }
 
 async function appendPlanRevisionAudit(input: {
@@ -493,8 +529,12 @@ export async function addWorkspaceMemberAction(
           status: "error",
           message: localized(
             locale,
-            "Ky përdorues është tashmë anëtar aktiv i workspace-it.",
-            "This user is already an active member of the workspace.",
+            existingMembership.status === "deactivated"
+              ? "Ky përdorues është i çaktivizuar në këtë workspace. Përdor reaktivizimin në listën e anëtarëve."
+              : "Ky përdorues është tashmë anëtar aktiv i workspace-it.",
+            existingMembership.status === "deactivated"
+              ? "This user is deactivated in this workspace. Use the member reactivation control instead."
+              : "This user is already an active member of the workspace.",
           ),
         };
       }
@@ -552,6 +592,248 @@ export async function addWorkspaceMemberAction(
         error instanceof Error
           ? error.message
           : localized(locale, "Krijimi i ftesës dështoi.", "Creating the invitation failed."),
+    };
+  }
+}
+
+export async function revokeWorkspaceInvitationAction(
+  locale: string,
+  workspaceSlug: string,
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  await requireAuthenticatedUserOrRedirect(locale, workspaceRoute(locale, workspaceSlug));
+  const workspace = await getWorkspaceMemberManagementBundle(workspaceSlug);
+
+  if (!workspace) {
+    return {
+      status: "error",
+      message: localized(locale, "Workspace-i nuk u gjet.", "Workspace not found."),
+    };
+  }
+
+  try {
+    assertWorkspacePermission(
+      workspace.permissions,
+      "canManageWorkspace",
+      localized(
+        locale,
+        "Nuk ke leje për të revokuar ftesa në këtë workspace.",
+        "You do not have permission to revoke invitations in this workspace.",
+      ),
+    );
+  } catch (error) {
+    return permissionError(error instanceof Error ? error.message : localized(locale, "Qasja u refuzua.", "Access denied."));
+  }
+
+  const invitationId = String(formData.get("invitationId") ?? "").trim();
+
+  if (!invitationId) {
+    return {
+      status: "error",
+      message: localized(locale, "Zgjidh ftesën që do të revokosh.", "Choose an invitation to revoke."),
+    };
+  }
+
+  const invitation = workspace.invitations.find((entry) => entry.id === invitationId) ?? null;
+
+  if (!invitation) {
+    return {
+      status: "error",
+      message: localized(locale, "Ftesa nuk u gjet.", "Invitation not found."),
+    };
+  }
+
+  if (invitation.status !== "pending") {
+    return successState(
+      localized(locale, "Ftesa nuk është më aktive.", "This invitation is no longer active."),
+    );
+  }
+
+  try {
+    const revokedInvitation = await revokeWorkspaceInvitation({
+      invitationId: invitation.id,
+    });
+
+    await appendWorkspaceLifecycleEvent({
+      workspaceId: workspace.workspace.id,
+      invitationId: revokedInvitation.id,
+      memberUserId: revokedInvitation.inviteeUserId,
+      actorUserId: workspace.currentUser.id,
+      actorLabel: workspace.currentUser.fullName,
+      eventType: "invitation_revoked",
+      memberEmail: revokedInvitation.email,
+      memberName: suggestedMemberNameFromEmail(revokedInvitation.email) || revokedInvitation.email,
+      previousRole: revokedInvitation.role,
+      nextRole: revokedInvitation.role,
+      summary: `${workspace.currentUser.fullName} revoked the workspace invitation for ${revokedInvitation.email}.`,
+    });
+
+    revalidateWorkspaceManagementRoutes(locale, workspaceSlug);
+
+    return successState(
+      localized(
+        locale,
+        `Ftesa për ${revokedInvitation.email} u revokua.`,
+        `The invitation for ${revokedInvitation.email} was revoked.`,
+      ),
+    );
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : localized(locale, "Revokimi i ftesës dështoi.", "Revoking the invitation failed."),
+    };
+  }
+}
+
+export async function resendWorkspaceInvitationAction(
+  locale: string,
+  workspaceSlug: string,
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  await requireAuthenticatedUserOrRedirect(locale, workspaceRoute(locale, workspaceSlug));
+  const workspace = await getWorkspaceMemberManagementBundle(workspaceSlug);
+
+  if (!workspace) {
+    return {
+      status: "error",
+      message: localized(locale, "Workspace-i nuk u gjet.", "Workspace not found."),
+    };
+  }
+
+  try {
+    assertWorkspacePermission(
+      workspace.permissions,
+      "canManageWorkspace",
+      localized(
+        locale,
+        "Nuk ke leje për të ridërguar ftesa në këtë workspace.",
+        "You do not have permission to resend invitations in this workspace.",
+      ),
+    );
+  } catch (error) {
+    return permissionError(error instanceof Error ? error.message : localized(locale, "Qasja u refuzua.", "Access denied."));
+  }
+
+  const invitationId = String(formData.get("invitationId") ?? "").trim();
+
+  if (!invitationId) {
+    return {
+      status: "error",
+      message: localized(locale, "Zgjidh ftesën që do të ridërgosh.", "Choose an invitation to resend."),
+    };
+  }
+
+  const invitation = workspace.invitations.find((entry) => entry.id === invitationId) ?? null;
+
+  if (!invitation) {
+    return {
+      status: "error",
+      message: localized(locale, "Ftesa nuk u gjet.", "Invitation not found."),
+    };
+  }
+
+  if (invitation.status === "accepted") {
+    return {
+      status: "error",
+      message: localized(
+        locale,
+        "Ftesat e pranuara nuk ridërgohen. Anëtari është tashmë në workspace.",
+        "Accepted invitations are not resent. The member is already in the workspace.",
+      ),
+    };
+  }
+
+  try {
+    const existingUser = await findUserByEmail(invitation.email);
+
+    if (existingUser) {
+      const existingMembership = await getWorkspaceMembership(workspace.workspace.id, existingUser.id);
+
+      if (existingMembership?.status === "active") {
+        return {
+          status: "error",
+          message: localized(
+            locale,
+            "Ky përdorues është tashmë anëtar aktiv i workspace-it.",
+            "This user is already an active member of the workspace.",
+          ),
+        };
+      }
+
+      if (existingMembership?.status === "deactivated") {
+        return {
+          status: "error",
+          message: localized(
+            locale,
+            "Ky përdorues është i çaktivizuar. Përdor reaktivizimin në vend të ridërgimit të ftesës.",
+            "This user is currently deactivated. Use member reactivation instead of resending the invitation.",
+          ),
+        };
+      }
+    }
+
+    if (invitation.status === "pending") {
+      await revokeWorkspaceInvitation({
+        invitationId: invitation.id,
+      });
+
+      await appendWorkspaceLifecycleEvent({
+        workspaceId: workspace.workspace.id,
+        invitationId: invitation.id,
+        memberUserId: invitation.inviteeUserId,
+        actorUserId: workspace.currentUser.id,
+        actorLabel: workspace.currentUser.fullName,
+        eventType: "invitation_revoked",
+        memberEmail: invitation.email,
+        memberName: suggestedMemberNameFromEmail(invitation.email) || invitation.email,
+        previousRole: invitation.role,
+        nextRole: invitation.role,
+        summary: `${workspace.currentUser.fullName} revoked the previous invitation for ${invitation.email} before resending it.`,
+      });
+    }
+
+    const resentInvitation = await createWorkspaceInvitation({
+      workspaceId: workspace.workspace.id,
+      invitedByUserId: workspace.currentUser.id,
+      email: invitation.email,
+      role: invitation.role,
+    });
+
+    await appendWorkspaceLifecycleEvent({
+      workspaceId: workspace.workspace.id,
+      invitationId: resentInvitation.id,
+      memberUserId: existingUser?.id ?? null,
+      actorUserId: workspace.currentUser.id,
+      actorLabel: workspace.currentUser.fullName,
+      eventType: "invitation_resent",
+      memberEmail: resentInvitation.email,
+      memberName: existingUser?.fullName || suggestedMemberNameFromEmail(resentInvitation.email) || resentInvitation.email,
+      previousRole: invitation.role,
+      nextRole: resentInvitation.role,
+      summary: `${workspace.currentUser.fullName} resent the workspace invitation for ${resentInvitation.email} as ${workspaceRoleLabel(resentInvitation.role)}.`,
+    });
+
+    revalidateWorkspaceManagementRoutes(locale, workspaceSlug);
+
+    return successState(
+      localized(
+        locale,
+        `Ftesa për ${resentInvitation.email} u ridërgua me link të ri.`,
+        `The invitation for ${resentInvitation.email} was resent with a fresh link.`,
+      ),
+    );
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : localized(locale, "Ridërgimi i ftesës dështoi.", "Resending the invitation failed."),
     };
   }
 }
@@ -800,6 +1082,100 @@ export async function deactivateWorkspaceMemberAction(
   }
 }
 
+export async function reactivateWorkspaceMemberAction(
+  locale: string,
+  workspaceSlug: string,
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  await requireAuthenticatedUserOrRedirect(locale, workspaceRoute(locale, workspaceSlug));
+  const workspace = await getWorkspaceMemberManagementBundle(workspaceSlug);
+
+  if (!workspace) {
+    return {
+      status: "error",
+      message: localized(locale, "Workspace-i nuk u gjet.", "Workspace not found."),
+    };
+  }
+
+  try {
+    assertWorkspacePermission(
+      workspace.permissions,
+      "canManageWorkspace",
+      localized(
+        locale,
+        "Nuk ke leje për të riaktivizuar anëtarë në këtë workspace.",
+        "You do not have permission to reactivate members in this workspace.",
+      ),
+    );
+  } catch (error) {
+    return permissionError(error instanceof Error ? error.message : localized(locale, "Qasja u refuzua.", "Access denied."));
+  }
+
+  const membershipId = String(formData.get("membershipId") ?? "").trim();
+
+  if (!membershipId) {
+    return {
+      status: "error",
+      message: localized(locale, "Zgjidh anëtarin që do të riaktivizosh.", "Choose a member to reactivate."),
+    };
+  }
+
+  const targetMember = workspace.members.find((member) => member.membershipId === membershipId) ?? null;
+
+  if (!targetMember) {
+    return {
+      status: "error",
+      message: localized(locale, "Anëtari nuk u gjet.", "Member not found."),
+    };
+  }
+
+  if (targetMember.status === "active") {
+    return successState(
+      localized(locale, "Anëtari është tashmë aktiv.", "The member is already active."),
+    );
+  }
+
+  try {
+    const updatedMembership = await reactivateWorkspaceMembership({
+      workspaceId: workspace.workspace.id,
+      membershipId: targetMember.membershipId,
+    });
+
+    await appendWorkspaceLifecycleEvent({
+      workspaceId: workspace.workspace.id,
+      membershipId: updatedMembership.id,
+      memberUserId: targetMember.userId,
+      actorUserId: workspace.currentUser.id,
+      actorLabel: workspace.currentUser.fullName,
+      eventType: "member_reactivated",
+      memberEmail: targetMember.email,
+      memberName: targetMember.fullName,
+      previousRole: targetMember.role,
+      nextRole: targetMember.role,
+      summary: `${workspace.currentUser.fullName} reactivated ${targetMember.fullName}.`,
+    });
+
+    revalidateWorkspaceManagementRoutes(locale, workspaceSlug);
+
+    return successState(
+      localized(
+        locale,
+        `${targetMember.fullName} u riaktivizua dhe qasja u rikthye.`,
+        `${targetMember.fullName} was reactivated and access was restored.`,
+      ),
+    );
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : localized(locale, "Riaktivizimi i anëtarit dështoi.", "Reactivating the member failed."),
+    };
+  }
+}
+
 export async function transferWorkspaceOwnershipAction(
   locale: string,
   workspaceSlug: string,
@@ -912,8 +1288,22 @@ export async function transferWorkspaceOwnershipAction(
     return successState(
       localized(
         locale,
-        `Ownership-i u transferua te ${targetMember.fullName}. Owner-i i mëparshëm tani është Admin.`,
-        `Ownership was transferred to ${targetMember.fullName}. The previous owner is now an Admin.`,
+        `Ownership-i u transferua te ${targetMember.fullName}. Owner-i i mëparshëm tani është Admin. ${buildProjectOwnershipTransferNote({
+          projects: workspace.projectOwnerships.map((entry) => ({
+            ownerUserId: entry.projectOwnerUserId,
+          })),
+          nextWorkspaceOwnerUserId: targetMember.userId,
+          previousWorkspaceOwnerUserId: currentOwner.userId,
+          locale,
+        })}`,
+        `Ownership was transferred to ${targetMember.fullName}. The previous owner is now an Admin. ${buildProjectOwnershipTransferNote({
+          projects: workspace.projectOwnerships.map((entry) => ({
+            ownerUserId: entry.projectOwnerUserId,
+          })),
+          nextWorkspaceOwnerUserId: targetMember.userId,
+          previousWorkspaceOwnerUserId: currentOwner.userId,
+          locale,
+        })}`,
       ),
     );
   } catch (error) {
@@ -1005,11 +1395,47 @@ export async function acceptWorkspaceInvitationAction(
       };
     }
 
-    const membership = await createWorkspaceMembership({
-      workspaceId: workspace.id,
-      userId: user.id,
-      role: invitation.role,
-    });
+    const existingMembership = await getWorkspaceMembership(workspace.id, user.id);
+
+    if (existingMembership?.status === "active") {
+      return {
+        status: "error",
+        message: localized(
+          locale,
+          "Ky përdorues është tashmë anëtar aktiv i workspace-it.",
+          "This user is already an active member of the workspace.",
+        ),
+      };
+    }
+
+    const membership =
+      existingMembership?.status === "deactivated"
+        ? await reactivateWorkspaceMembership({
+            workspaceId: workspace.id,
+            membershipId: existingMembership.id,
+          })
+        : await createWorkspaceMembership({
+            workspaceId: workspace.id,
+            userId: user.id,
+            role: invitation.role,
+          });
+
+    if (existingMembership?.status === "deactivated") {
+      await appendWorkspaceLifecycleEvent({
+        workspaceId: workspace.id,
+        membershipId: membership.id,
+        invitationId: invitation.id,
+        memberUserId: user.id,
+        actorUserId: user.id,
+        actorLabel: user.fullName,
+        eventType: "member_reactivated",
+        memberEmail: user.email,
+        memberName: user.fullName,
+        previousRole: existingMembership.role,
+        nextRole: existingMembership.role,
+        summary: `${user.fullName} reactivated their workspace membership while accepting an invitation.`,
+      });
+    }
 
     await acceptWorkspaceInvitation({
       invitationId: invitation.id,

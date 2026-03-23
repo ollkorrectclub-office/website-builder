@@ -35,6 +35,7 @@ import type {
   WorkspaceMemberRecord,
   WorkspaceMemberManagementBundle,
   WorkspacePermissionsRecord,
+  WorkspaceProjectOwnershipVisibilityRecord,
   UpdateProjectBriefInput,
   WorkspaceRecord,
   WorkspaceWithProjects,
@@ -222,6 +223,32 @@ function mapBriefRow(row: Record<string, unknown>): ProjectBriefRecord {
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
+}
+
+function buildWorkspaceProjectOwnerships(input: {
+  projects: ProjectRecord[];
+  members: WorkspaceMemberManagementBundle["members"];
+  workspaceOwnerUserId: string;
+}): WorkspaceProjectOwnershipVisibilityRecord[] {
+  const membersByUserId = new Map(input.members.map((member) => [member.userId, member]));
+
+  return [...input.projects]
+    .sort((left, right) => left.name.localeCompare(right.name) || left.slug.localeCompare(right.slug))
+    .map((project) => {
+      const ownerMembership = membersByUserId.get(project.ownerUserId) ?? null;
+
+      return {
+        projectId: project.id,
+        projectSlug: project.slug,
+        projectName: project.name,
+        projectOwnerUserId: project.ownerUserId,
+        projectOwnerName: ownerMembership?.fullName ?? "Unknown owner",
+        projectOwnerEmail: ownerMembership?.email ?? "",
+        projectOwnerWorkspaceRole: ownerMembership?.role ?? null,
+        projectOwnerMembershipStatus: ownerMembership?.status ?? null,
+        isWorkspaceOwner: project.ownerUserId === input.workspaceOwnerUserId,
+      };
+    });
 }
 
 async function listWorkspacesLocal() {
@@ -1019,17 +1046,8 @@ export async function getWorkspaceWithProjects(slug: string): Promise<WorkspaceW
 export async function getWorkspaceMemberManagementBundle(
   slug: string,
 ): Promise<WorkspaceMemberManagementBundle | null> {
-  const workspace = isSupabaseConfigured()
-    ? await getWorkspaceBySlugSupabase(slug)
-    : await getWorkspaceBySlugLocal(slug);
-
+  const workspace = await getWorkspaceWithProjects(slug);
   if (!workspace) {
-    return null;
-  }
-
-  const access = await resolveWorkspaceAccess(workspace);
-
-  if (!access) {
     return null;
   }
 
@@ -1041,12 +1059,17 @@ export async function getWorkspaceMemberManagementBundle(
 
   return {
     workspace,
-    currentUser: access.currentUser,
-    membership: access.membership,
-    permissions: access.permissions,
+    currentUser: workspace.currentUser,
+    membership: workspace.membership,
+    permissions: workspace.permissions,
     members,
     invitations,
     events,
+    projectOwnerships: buildWorkspaceProjectOwnerships({
+      projects: workspace.projects,
+      members,
+      workspaceOwnerUserId: workspace.ownerUserId,
+    }),
   };
 }
 

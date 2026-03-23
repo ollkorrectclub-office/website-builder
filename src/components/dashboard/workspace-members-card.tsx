@@ -86,10 +86,22 @@ function lifecycleEventLabel(locale: Locale, dictionary: Dictionary, event: Work
       return locale === "sq"
         ? `${event.memberName} e pranoi ftesën si ${workspaceRoleLabels[event.nextRole][locale]}`
         : `${event.memberName} accepted the invitation as ${workspaceRoleLabels[event.nextRole][locale]}`;
+    case "invitation_revoked":
+      return locale === "sq"
+        ? `Ftesa për ${event.memberEmail} u revokua`
+        : `The invitation for ${event.memberEmail} was revoked`;
+    case "invitation_resent":
+      return locale === "sq"
+        ? `Ftesa për ${event.memberEmail} u ridërgua si ${workspaceRoleLabels[event.nextRole][locale]}`
+        : `The invitation for ${event.memberEmail} was resent as ${workspaceRoleLabels[event.nextRole][locale]}`;
     case "member_deactivated":
       return locale === "sq"
         ? `${event.memberName} u çaktivizua nga workspace-i`
         : `${event.memberName} was deactivated from the workspace`;
+    case "member_reactivated":
+      return locale === "sq"
+        ? `${event.memberName} u riaktivizua në workspace`
+        : `${event.memberName} was reactivated in the workspace`;
     case "owner_transferred":
       return locale === "sq"
         ? `Ownership-i u transferua te ${event.memberName}`
@@ -101,8 +113,14 @@ function eventTone(eventType: WorkspaceMemberEventRecord["eventType"]) {
   switch (eventType) {
     case "owner_transferred":
       return "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200";
+    case "member_reactivated":
+      return "bg-lime-100 text-lime-800 dark:bg-lime-900/40 dark:text-lime-200";
     case "member_deactivated":
       return "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200";
+    case "invitation_revoked":
+      return "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200";
+    case "invitation_resent":
+      return "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-200";
     case "invitation_created":
       return "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200";
     case "invitation_accepted":
@@ -122,8 +140,14 @@ function eventLabel(locale: Locale, eventType: WorkspaceMemberEventRecord["event
       return locale === "sq" ? "Ftesë" : "Invite";
     case "invitation_accepted":
       return locale === "sq" ? "Pranim" : "Accepted";
+    case "invitation_revoked":
+      return locale === "sq" ? "Revokuar" : "Revoked";
+    case "invitation_resent":
+      return locale === "sq" ? "Ridërguar" : "Resent";
     case "member_deactivated":
       return locale === "sq" ? "Çaktivizuar" : "Deactivated";
+    case "member_reactivated":
+      return locale === "sq" ? "Riaktivizuar" : "Reactivated";
     case "owner_transferred":
       return locale === "sq" ? "Transferim owner" : "Owner transfer";
   }
@@ -137,6 +161,7 @@ function MemberLifecycleRow({
   isCurrentUser,
   updateRoleAction,
   deactivateMemberAction,
+  reactivateMemberAction,
 }: {
   locale: Locale;
   dictionary: Dictionary;
@@ -145,13 +170,16 @@ function MemberLifecycleRow({
   isCurrentUser: boolean;
   updateRoleAction: MemberAction;
   deactivateMemberAction: MemberAction;
+  reactivateMemberAction: MemberAction;
 }) {
   const [roleState, roleFormAction] = useActionState(updateRoleAction, initialFormState);
   const [deactivateState, deactivateFormAction] = useActionState(deactivateMemberAction, initialFormState);
+  const [reactivateState, reactivateFormAction] = useActionState(reactivateMemberAction, initialFormState);
   const ownerLocked = member.role === "owner";
   const inactive = member.status !== "active";
   const canEditRole = canManage && !ownerLocked && !inactive;
   const canDeactivate = canManage && !ownerLocked && !inactive && !isCurrentUser;
+  const canReactivate = canManage && inactive;
 
   return (
     <div className="rounded-[20px] border border-border bg-background/70 p-4" data-testid={`workspace-member-row-${member.membershipId}`}>
@@ -201,30 +229,51 @@ function MemberLifecycleRow({
             ) : null}
           </form>
 
-          <form action={deactivateFormAction} className="space-y-2">
-            <input type="hidden" name="membershipId" value={member.membershipId} />
-            <MemberActionButton
-              label={dictionary.dashboard.members.deactivateAction}
-              pendingLabel={dictionary.dashboard.members.deactivatingAction}
-              disabled={!canDeactivate}
-              variant="secondary"
-              testId={`workspace-member-deactivate-${member.membershipId}`}
-            />
-            {!canDeactivate && !inactive ? (
-              <p className="text-xs text-muted-foreground">
-                {ownerLocked
-                  ? dictionary.dashboard.members.ownerLockedCopy
-                  : isCurrentUser
-                    ? dictionary.dashboard.members.deactivateSelfCopy
-                    : dictionary.dashboard.members.readOnlyCopy}
-              </p>
-            ) : null}
-            {deactivateState.message ? (
-              <p className={`text-xs ${deactivateState.status === "error" ? "text-red-600 dark:text-red-300" : "text-emerald-700 dark:text-emerald-300"}`}>
-                {deactivateState.message}
-              </p>
-            ) : null}
-          </form>
+          {inactive ? (
+            <form action={reactivateFormAction} className="space-y-2">
+              <input type="hidden" name="membershipId" value={member.membershipId} />
+              <MemberActionButton
+                label={dictionary.dashboard.members.reactivateAction}
+                pendingLabel={dictionary.dashboard.members.reactivatingAction}
+                disabled={!canReactivate}
+                variant="secondary"
+                testId={`workspace-member-reactivate-${member.membershipId}`}
+              />
+              {!canReactivate ? (
+                <p className="text-xs text-muted-foreground">{dictionary.dashboard.members.readOnlyCopy}</p>
+              ) : null}
+              {reactivateState.message ? (
+                <p className={`text-xs ${reactivateState.status === "error" ? "text-red-600 dark:text-red-300" : "text-emerald-700 dark:text-emerald-300"}`}>
+                  {reactivateState.message}
+                </p>
+              ) : null}
+            </form>
+          ) : (
+            <form action={deactivateFormAction} className="space-y-2">
+              <input type="hidden" name="membershipId" value={member.membershipId} />
+              <MemberActionButton
+                label={dictionary.dashboard.members.deactivateAction}
+                pendingLabel={dictionary.dashboard.members.deactivatingAction}
+                disabled={!canDeactivate}
+                variant="secondary"
+                testId={`workspace-member-deactivate-${member.membershipId}`}
+              />
+              {!canDeactivate ? (
+                <p className="text-xs text-muted-foreground">
+                  {ownerLocked
+                    ? dictionary.dashboard.members.ownerLockedCopy
+                    : isCurrentUser
+                      ? dictionary.dashboard.members.deactivateSelfCopy
+                      : dictionary.dashboard.members.readOnlyCopy}
+                </p>
+              ) : null}
+              {deactivateState.message ? (
+                <p className={`text-xs ${deactivateState.status === "error" ? "text-red-600 dark:text-red-300" : "text-emerald-700 dark:text-emerald-300"}`}>
+                  {deactivateState.message}
+                </p>
+              ) : null}
+            </form>
+          )}
         </div>
       </div>
     </div>
@@ -235,12 +284,22 @@ function InvitationRow({
   locale,
   dictionary,
   invitation,
+  canManage,
+  revokeInvitationAction,
+  resendInvitationAction,
 }: {
   locale: Locale;
   dictionary: Dictionary;
   invitation: WorkspaceInvitationRecord;
+  canManage: boolean;
+  revokeInvitationAction: MemberAction;
+  resendInvitationAction: MemberAction;
 }) {
+  const [revokeState, revokeFormAction] = useActionState(revokeInvitationAction, initialFormState);
+  const [resendState, resendFormAction] = useActionState(resendInvitationAction, initialFormState);
   const inviteHref = `/${locale}/invite/${invitation.invitationToken}`;
+  const canRevoke = canManage && invitation.status === "pending";
+  const canResend = canManage && invitation.status !== "accepted";
 
   return (
     <div className="rounded-[18px] border border-border bg-card/70 px-4 py-4" data-testid={`workspace-invitation-row-${invitation.id}`}>
@@ -257,6 +316,11 @@ function InvitationRow({
           {dictionary.dashboard.members.inviteAcceptedAt}: {formatDateTimeLabel(invitation.acceptedAt, locale)}
         </p>
       ) : null}
+      {invitation.revokedAt ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          {dictionary.dashboard.members.inviteRevokedAt}: {formatDateTimeLabel(invitation.revokedAt, locale)}
+        </p>
+      ) : null}
       {invitation.status === "pending" ? (
         <div className="mt-4">
           <Link
@@ -268,7 +332,123 @@ function InvitationRow({
           </Link>
         </div>
       ) : null}
+
+      {invitation.status !== "accepted" ? (
+        <>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <form action={resendFormAction}>
+              <input type="hidden" name="invitationId" value={invitation.id} />
+              <MemberActionButton
+                label={dictionary.dashboard.members.inviteResendAction}
+                pendingLabel={dictionary.dashboard.members.inviteResendingAction}
+                disabled={!canResend}
+                variant="secondary"
+                testId={`workspace-invitation-resend-${invitation.id}`}
+              />
+            </form>
+            <form action={revokeFormAction}>
+              <input type="hidden" name="invitationId" value={invitation.id} />
+              <MemberActionButton
+                label={dictionary.dashboard.members.inviteRevokeAction}
+                pendingLabel={dictionary.dashboard.members.inviteRevokingAction}
+                disabled={!canRevoke}
+                variant="secondary"
+                testId={`workspace-invitation-revoke-${invitation.id}`}
+              />
+            </form>
+          </div>
+
+          {resendState.message ? (
+            <p className={`mt-3 text-xs ${resendState.status === "error" ? "text-red-600 dark:text-red-300" : "text-emerald-700 dark:text-emerald-300"}`}>
+              {resendState.message}
+            </p>
+          ) : null}
+          {revokeState.message ? (
+            <p className={`mt-3 text-xs ${revokeState.status === "error" ? "text-red-600 dark:text-red-300" : "text-emerald-700 dark:text-emerald-300"}`}>
+              {revokeState.message}
+            </p>
+          ) : null}
+        </>
+      ) : null}
     </div>
+  );
+}
+
+function ProjectOwnershipVisibilityCard({
+  locale,
+  dictionary,
+  bundle,
+}: {
+  locale: Locale;
+  dictionary: Dictionary;
+  bundle: WorkspaceMemberManagementBundle;
+}) {
+  const projectsOwnedByWorkspaceOwner = bundle.projectOwnerships.filter((entry) => entry.isWorkspaceOwner).length;
+  const projectsOwnedByOtherMembers = bundle.projectOwnerships.length - projectsOwnedByWorkspaceOwner;
+  const projectsWithDeactivatedOwner = bundle.projectOwnerships.filter(
+    (entry) => entry.projectOwnerMembershipStatus === "deactivated",
+  ).length;
+
+  return (
+    <Card className="border-border bg-background/70 px-5 py-5 shadow-none" data-testid="workspace-project-ownership-card">
+      <p className="text-sm font-semibold text-card-foreground">{dictionary.dashboard.members.projectOwnershipTitle}</p>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">{dictionary.dashboard.members.projectOwnershipCopy}</p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-[18px] border border-border bg-card/70 px-4 py-4 text-center">
+          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+            {dictionary.dashboard.members.projectOwnershipWorkspaceOwner}
+          </p>
+          <p className="mt-2 text-lg font-semibold text-card-foreground">{projectsOwnedByWorkspaceOwner}</p>
+        </div>
+        <div className="rounded-[18px] border border-border bg-card/70 px-4 py-4 text-center">
+          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+            {dictionary.dashboard.members.projectOwnershipOtherOwners}
+          </p>
+          <p className="mt-2 text-lg font-semibold text-card-foreground">{projectsOwnedByOtherMembers}</p>
+        </div>
+        <div className="rounded-[18px] border border-border bg-card/70 px-4 py-4 text-center">
+          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+            {dictionary.dashboard.members.projectOwnershipDeactivatedOwners}
+          </p>
+          <p className="mt-2 text-lg font-semibold text-card-foreground">{projectsWithDeactivatedOwner}</p>
+        </div>
+      </div>
+      <div className="mt-4 space-y-3">
+        {bundle.projectOwnerships.length > 0 ? (
+          bundle.projectOwnerships.map((entry) => (
+            <div
+              key={entry.projectId}
+              className="rounded-[18px] border border-border bg-card/70 px-4 py-4"
+              data-testid={`workspace-project-ownership-row-${entry.projectId}`}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge>{entry.projectName}</Badge>
+                <Badge className={entry.isWorkspaceOwner ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"}>
+                  {entry.isWorkspaceOwner
+                    ? dictionary.dashboard.members.projectOwnershipMatches
+                    : dictionary.dashboard.members.projectOwnershipDiffers}
+                </Badge>
+                {entry.projectOwnerWorkspaceRole ? (
+                  <Badge className="bg-card/80">{workspaceRoleLabels[entry.projectOwnerWorkspaceRole][locale]}</Badge>
+                ) : null}
+                {entry.projectOwnerMembershipStatus ? (
+                  <Badge className="bg-card/80">{workspaceMemberStatusLabels[entry.projectOwnerMembershipStatus][locale]}</Badge>
+                ) : null}
+              </div>
+              <p className="mt-3 text-sm font-semibold text-card-foreground">{entry.projectOwnerName}</p>
+              <p className="mt-2 text-xs text-muted-foreground">{entry.projectOwnerEmail}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {entry.isWorkspaceOwner
+                  ? dictionary.dashboard.members.projectOwnershipMatchesCopy
+                  : dictionary.dashboard.members.projectOwnershipDiffersCopy}
+              </p>
+            </div>
+          ))
+        ) : (
+          <p className="text-sm leading-6 text-muted-foreground">{dictionary.dashboard.members.projectOwnershipEmpty}</p>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -302,6 +482,7 @@ function OwnerTransferCard({
             defaultValue=""
             className={fieldClass()}
             disabled={!canTransfer}
+            data-testid="workspace-owner-transfer-target"
           >
             <option value="">{dictionary.dashboard.members.transferSelectPlaceholder}</option>
             {eligibleMembers.map((member) => (
@@ -318,6 +499,7 @@ function OwnerTransferCard({
             placeholder={bundle.workspace.slug}
             className={fieldClass()}
             disabled={!canTransfer}
+            data-testid="workspace-owner-transfer-confirmation"
           />
           <p className="text-xs text-muted-foreground">{dictionary.dashboard.members.transferConfirmationHint}</p>
         </label>
@@ -347,6 +529,9 @@ export function WorkspaceMembersCard({
   inviteMemberAction,
   updateRoleAction,
   deactivateMemberAction,
+  reactivateMemberAction,
+  revokeInvitationAction,
+  resendInvitationAction,
   transferOwnerAction,
 }: {
   locale: Locale;
@@ -355,6 +540,9 @@ export function WorkspaceMembersCard({
   inviteMemberAction: MemberAction;
   updateRoleAction: MemberAction;
   deactivateMemberAction: MemberAction;
+  reactivateMemberAction: MemberAction;
+  revokeInvitationAction: MemberAction;
+  resendInvitationAction: MemberAction;
   transferOwnerAction: MemberAction;
 }) {
   const [inviteState, inviteFormAction] = useActionState(inviteMemberAction, initialFormState);
@@ -415,6 +603,7 @@ export function WorkspaceMembersCard({
                 isCurrentUser={member.userId === bundle.currentUser.id}
                 updateRoleAction={updateRoleAction}
                 deactivateMemberAction={deactivateMemberAction}
+                reactivateMemberAction={reactivateMemberAction}
               />
             ))}
           </div>
@@ -466,6 +655,9 @@ export function WorkspaceMembersCard({
                       locale={locale}
                       dictionary={dictionary}
                       invitation={invitation}
+                      canManage={canManageMembers}
+                      revokeInvitationAction={revokeInvitationAction}
+                      resendInvitationAction={resendInvitationAction}
                     />
                   ))
                 ) : (
@@ -480,6 +672,8 @@ export function WorkspaceMembersCard({
               bundle={bundle}
               transferOwnerAction={transferOwnerAction}
             />
+
+            <ProjectOwnershipVisibilityCard locale={locale} dictionary={dictionary} bundle={bundle} />
 
             <Card className="border-border bg-background/70 px-5 py-5 shadow-none">
               <p className="text-sm font-semibold text-card-foreground">{dictionary.dashboard.members.activityTitle}</p>

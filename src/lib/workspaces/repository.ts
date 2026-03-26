@@ -36,6 +36,7 @@ import type {
   WorkspaceMemberManagementBundle,
   WorkspacePermissionsRecord,
   WorkspaceProjectOwnershipVisibilityRecord,
+  UpdateProjectOwnerInput,
   UpdateProjectBriefInput,
   WorkspaceRecord,
   WorkspaceWithProjects,
@@ -492,6 +493,25 @@ async function updateWorkspaceOwnerLocal(input: {
   store.workspaces[workspaceIndex] = updatedWorkspace;
   await writeLocalStore(store);
   return updatedWorkspace;
+}
+
+async function updateProjectOwnerLocal(input: UpdateProjectOwnerInput) {
+  const store = await readLocalStore();
+  const projectIndex = store.projects.findIndex((project) => project.id === input.projectId);
+
+  if (projectIndex === -1) {
+    throw new Error("Project not found.");
+  }
+
+  const updatedProject: ProjectRecord = {
+    ...store.projects[projectIndex],
+    ownerUserId: input.ownerUserId,
+    updatedAt: nowIso(),
+  };
+
+  store.projects[projectIndex] = updatedProject;
+  await writeLocalStore(store);
+  return updatedProject;
 }
 
 async function listWorkspacesSupabase() {
@@ -978,6 +998,30 @@ async function updateWorkspaceOwnerSupabase(input: {
   );
 }
 
+async function updateProjectOwnerSupabase(input: UpdateProjectOwnerInput) {
+  const client = createSupabaseServerClient();
+
+  if (!client) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const { data, error } = await client
+    .from("projects")
+    .update({
+      owner_user_id: input.ownerUserId,
+      updated_at: nowIso(),
+    })
+    .eq("id", input.projectId)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return mapProjectRow(data as unknown as Record<string, unknown>);
+}
+
 export function getPersistenceSummary(): PersistenceSummary {
   return {
     mode: isSupabaseConfigured() ? "supabase" : "local",
@@ -1220,4 +1264,12 @@ export async function updateWorkspaceOwner(input: {
   }
 
   return updateWorkspaceOwnerLocal(input);
+}
+
+export async function updateProjectOwner(input: UpdateProjectOwnerInput) {
+  if (isSupabaseConfigured()) {
+    return updateProjectOwnerSupabase(input);
+  }
+
+  return updateProjectOwnerLocal(input);
 }

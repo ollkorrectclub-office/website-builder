@@ -456,6 +456,12 @@ function normalizeLocalStore(store: Partial<LocalStoreShape>) {
               : typeof event.workspace_id === "string"
                 ? event.workspace_id
                 : "",
+          projectId:
+            typeof event.projectId === "string"
+              ? event.projectId
+              : typeof event.project_id === "string"
+                ? event.project_id
+                : null,
           membershipId:
             typeof event.membershipId === "string"
               ? event.membershipId

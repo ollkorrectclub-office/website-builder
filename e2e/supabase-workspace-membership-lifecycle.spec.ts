@@ -1,8 +1,9 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
-import { e2eLocale, e2eWorkspaceSlug, isSupabaseE2EMode } from "./support/env";
+import { e2eLocale, e2eProjectSlug, e2eWorkspaceSlug, isSupabaseE2EMode } from "./support/env";
 
 const workspaceManagePath = `/${e2eLocale}/app/workspaces/${e2eWorkspaceSlug}`;
+const projectTimelinePath = `/${e2eLocale}/app/workspaces/${e2eWorkspaceSlug}/projects/${e2eProjectSlug}/timeline`;
 const ownerEmail = process.env.BESA_E2E_SUPABASE_OWNER_EMAIL ?? "";
 const ownerPassword = process.env.BESA_E2E_SUPABASE_OWNER_PASSWORD ?? "";
 
@@ -67,7 +68,7 @@ async function acceptInvitation(
 test.describe.serial("supabase workspace membership lifecycle", () => {
   test.skip(!isSupabaseE2EMode(), "This suite only runs when Supabase E2E mode is enabled.");
 
-  test("accepts an invitation and transfers workspace ownership with visible project ownership post-checks", async ({
+  test("accepts an invitation, transfers workspace ownership, and reassigns project ownership with visible audit history", async ({
     browser,
     page,
   }) => {
@@ -111,15 +112,36 @@ test.describe.serial("supabase workspace membership lifecycle", () => {
     await expect(page.getByTestId("workspace-project-ownership-review-card")).toContainText(
       /Needs review|Kërkon review/i,
     );
+    const projectOwnershipRow = page.getByTestId(/workspace-project-ownership-review-row-/).first();
+    await projectOwnershipRow.getByTestId(/workspace-project-owner-target-/).selectOption(inviteeMembershipId);
+    await projectOwnershipRow.getByTestId(/workspace-project-owner-confirmation-/).fill(e2eProjectSlug);
+    await projectOwnershipRow.getByTestId(/workspace-project-owner-submit-/).click();
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByTestId("workspace-project-ownership-card")).toContainText(
+      /Matches workspace owner|Përputhet me workspace owner/i,
+    );
+    await expect(page.getByTestId("workspace-project-ownership-review-card")).toContainText(
+      /Aligned|I përafruar/i,
+    );
 
     await inviteeSession.page.goto(workspaceManagePath);
     await expect(inviteeSession.page.getByTestId("workspace-owner-transfer-submit")).toBeEnabled();
     await expect(inviteeSession.page.getByTestId("workspace-project-ownership-card")).toContainText(
-      /Different from workspace owner|Ndryshe nga workspace owner/i,
+      /Matches workspace owner|Përputhet me workspace owner/i,
     );
     await expect(inviteeSession.page.getByTestId("workspace-project-ownership-review-card")).toContainText(
-      /Needs review|Kërkon review/i,
+      /Aligned|I përafruar/i,
     );
+
+    await page.goto(projectTimelinePath);
+    const reassignmentEvent = page
+      .locator('[data-testid="timeline-event-card"][data-event-kind="project_owner_reassigned"]')
+      .first();
+    await expect(reassignmentEvent).toBeVisible();
+    await expect(reassignmentEvent).toContainText(invitee.fullName);
+    await reassignmentEvent.getByTestId("timeline-open-context").click();
+    await page.waitForURL(`**/${e2eProjectSlug}/plan`);
 
     await inviteeSession.context.close();
   });

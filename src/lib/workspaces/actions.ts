@@ -28,7 +28,7 @@ import {
 } from "@/lib/auth/repository";
 import { appendProjectAuditEvent } from "@/lib/builder/audit-repository";
 import { enqueueProjectBuilderRefreshQueue } from "@/lib/builder/refresh-queue-repository";
-import { projectBaseRoute, projectTabRoute, projectTimelineRoute } from "@/lib/builder/routes";
+import { projectBaseRoute, projectDeployRoute, projectTabRoute, projectTimelineRoute } from "@/lib/builder/routes";
 import type {
   BuilderImpactSurfaceRecord,
   BuilderRefreshSurface,
@@ -70,6 +70,7 @@ import {
   getWorkspaceMemberManagementBundle,
   getProjectPlanBundle,
   getWorkspaceWithProjects,
+  updateProjectOwner,
   updateWorkspaceOwner,
   updateProjectBrief,
 } from "@/lib/workspaces/repository";
@@ -195,6 +196,16 @@ function revalidateWorkspaceManagementRoutes(locale: string, workspaceSlug: stri
   revalidatePath(workspaceRoute(locale, workspaceSlug), "layout");
 }
 
+function revalidateProjectOwnershipRoutes(locale: string, workspaceSlug: string, projectSlug: string) {
+  revalidatePath(projectBaseRoute(locale, workspaceSlug, projectSlug), "layout");
+  revalidatePath(planRoute(locale, workspaceSlug, projectSlug));
+  revalidatePath(projectTabRoute(locale, workspaceSlug, projectSlug, "visual"));
+  revalidatePath(projectTabRoute(locale, workspaceSlug, projectSlug, "code"));
+  revalidatePath(projectTabRoute(locale, workspaceSlug, projectSlug, "preview"));
+  revalidatePath(projectTimelineRoute(locale, workspaceSlug, projectSlug));
+  revalidatePath(projectDeployRoute(locale, workspaceSlug, projectSlug));
+}
+
 function buildGenerationQueueSummary(input: {
   surface: "visual" | "code";
   targetRevisionNumber: number;
@@ -283,6 +294,7 @@ function suggestedMemberNameFromEmail(email: string) {
 
 async function appendWorkspaceLifecycleEvent(input: {
   workspaceId: string;
+  projectId?: string | null;
   membershipId?: string | null;
   invitationId?: string | null;
   memberUserId?: string | null;
@@ -297,7 +309,8 @@ async function appendWorkspaceLifecycleEvent(input: {
     | "invitation_resent"
     | "member_deactivated"
     | "member_reactivated"
-    | "owner_transferred";
+    | "owner_transferred"
+    | "project_owner_reassigned";
   memberEmail: string;
   memberName: string;
   previousRole: WorkspaceRole | null;
@@ -308,6 +321,7 @@ async function appendWorkspaceLifecycleEvent(input: {
   await appendWorkspaceMemberEvent({
     id: crypto.randomUUID(),
     workspaceId: input.workspaceId,
+    projectId: input.projectId ?? null,
     membershipId: input.membershipId ?? null,
     invitationId: input.invitationId ?? null,
     memberUserId: input.memberUserId ?? null,
@@ -1323,6 +1337,178 @@ export async function transferWorkspaceOwnershipAction(
         error instanceof Error
           ? error.message
           : localized(locale, "Transferimi i ownership-it dështoi.", "Ownership transfer failed."),
+    };
+  }
+}
+
+export async function reassignProjectOwnerAction(
+  locale: string,
+  workspaceSlug: string,
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  await requireAuthenticatedUserOrRedirect(locale, workspaceRoute(locale, workspaceSlug));
+  const [workspace, memberManagement] = await Promise.all([
+    getWorkspaceWithProjects(workspaceSlug),
+    getWorkspaceMemberManagementBundle(workspaceSlug),
+  ]);
+
+  if (!workspace || !memberManagement) {
+    return {
+      status: "error",
+      message: localized(locale, "Workspace-i nuk u gjet.", "Workspace not found."),
+    };
+  }
+
+  try {
+    assertWorkspacePermission(
+      memberManagement.permissions,
+      "canManageWorkspace",
+      localized(
+        locale,
+        "Nuk ke leje për të reasignuar project ownership në këtë workspace.",
+        "You do not have permission to reassign project ownership in this workspace.",
+      ),
+    );
+  } catch (error) {
+    return permissionError(error instanceof Error ? error.message : localized(locale, "Qasja u refuzua.", "Access denied."));
+  }
+
+  const projectId = String(formData.get("projectId") ?? "").trim();
+  const targetMembershipId = String(formData.get("targetMembershipId") ?? "").trim();
+  const confirmation = String(formData.get("confirmation") ?? "").trim();
+
+  if (!projectId || !targetMembershipId) {
+    return {
+      status: "error",
+      message: localized(
+        locale,
+        "Zgjidh projektin dhe owner-in e ri për reasignim.",
+        "Choose the project and the new owner for reassignment.",
+      ),
+    };
+  }
+
+  const project = workspace.projects.find((entry) => entry.id === projectId) ?? null;
+  const projectOwnership = memberManagement.projectOwnerships.find((entry) => entry.projectId === projectId) ?? null;
+  const targetMember = memberManagement.members.find((entry) => entry.membershipId === targetMembershipId) ?? null;
+
+  if (!project || !projectOwnership) {
+    return {
+      status: "error",
+      message: localized(locale, "Projekti nuk u gjet.", "Project not found."),
+    };
+  }
+
+  if (confirmation !== project.slug) {
+    return {
+      status: "error",
+      message: localized(
+        locale,
+        "Shkruaj slug-un e projektit për ta konfirmuar reasignimin.",
+        "Enter the project slug to confirm the reassignment.",
+      ),
+    };
+  }
+
+  if (!targetMember || targetMember.status !== "active") {
+    return {
+      status: "error",
+      message: localized(
+        locale,
+        "Zgjidh një anëtar aktiv si owner të ri të projektit.",
+        "Choose an active member as the new project owner.",
+      ),
+    };
+  }
+
+  if (project.ownerUserId === targetMember.userId) {
+    return successState(
+      localized(
+        locale,
+        `${project.name} është tashmë në pronësi të ${targetMember.fullName}.`,
+        `${project.name} is already owned by ${targetMember.fullName}.`,
+      ),
+    );
+  }
+
+  try {
+    await updateProjectOwner({
+      projectId: project.id,
+      ownerUserId: targetMember.userId,
+    });
+
+    const workspaceEventSummary = localized(
+      locale,
+      `${memberManagement.currentUser.fullName} e reasignoi ${project.name} nga ${projectOwnership.projectOwnerName} te ${targetMember.fullName}.`,
+      `${memberManagement.currentUser.fullName} reassigned ${project.name} from ${projectOwnership.projectOwnerName} to ${targetMember.fullName}.`,
+    );
+    const auditTitle = localized(
+      locale,
+      `Project owner u reasignua për ${project.name}`,
+      `Project owner reassigned for ${project.name}`,
+    );
+
+    await appendWorkspaceLifecycleEvent({
+      workspaceId: workspace.id,
+      projectId: project.id,
+      membershipId: targetMember.membershipId,
+      memberUserId: targetMember.userId,
+      actorUserId: memberManagement.currentUser.id,
+      actorLabel: memberManagement.currentUser.fullName,
+      eventType: "project_owner_reassigned",
+      memberEmail: targetMember.email,
+      memberName: targetMember.fullName,
+      previousRole: projectOwnership.projectOwnerWorkspaceRole,
+      nextRole: targetMember.role,
+      summary: workspaceEventSummary,
+    });
+
+    await appendProjectAuditEvent({
+      projectId: project.id,
+      workspaceId: workspace.id,
+      source: "plan",
+      kind: "project_owner_reassigned",
+      title: auditTitle,
+      summary: workspaceEventSummary,
+      actorType: "user",
+      actorUserId: memberManagement.currentUser.id,
+      actorLabel: memberManagement.currentUser.fullName,
+      entityType: "project",
+      entityId: project.id,
+      linkedTab: "plan",
+      linkContext: {
+        tab: "plan",
+      },
+      metadata: {
+        projectName: project.name,
+        previousOwnerUserId: projectOwnership.projectOwnerUserId,
+        previousOwnerName: projectOwnership.projectOwnerName,
+        previousOwnerEmail: projectOwnership.projectOwnerEmail,
+        nextOwnerUserId: targetMember.userId,
+        nextOwnerName: targetMember.fullName,
+        nextOwnerEmail: targetMember.email,
+      },
+      occurredAt: new Date().toISOString(),
+    });
+
+    revalidateWorkspaceManagementRoutes(locale, workspaceSlug);
+    revalidateProjectOwnershipRoutes(locale, workspaceSlug, project.slug);
+
+    return successState(
+      localized(
+        locale,
+        `Project ownership për ${project.name} u reasignua te ${targetMember.fullName}. Historia u ruajt në activity log dhe timeline.`,
+        `Project ownership for ${project.name} was reassigned to ${targetMember.fullName}. The history was saved in the activity log and timeline.`,
+      ),
+    );
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : localized(locale, "Reasignimi i project owner dështoi.", "Project owner reassignment failed."),
     };
   }
 }

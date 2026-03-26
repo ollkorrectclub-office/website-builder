@@ -11,6 +11,7 @@ import {
 import {
   addWorkspaceMemberAction,
   deactivateWorkspaceMemberAction,
+  reassignProjectOwnerAction,
   reactivateWorkspaceMemberAction,
   resendWorkspaceInvitationAction,
   revokeWorkspaceInvitationAction,
@@ -49,6 +50,7 @@ export default async function WorkspacePage({
       revokeInvitationAction={revokeWorkspaceInvitationAction.bind(null, locale, workspace.slug)}
       resendInvitationAction={resendWorkspaceInvitationAction.bind(null, locale, workspace.slug)}
       transferOwnerAction={transferWorkspaceOwnershipAction.bind(null, locale, workspace.slug)}
+      reassignProjectOwnerAction={reassignProjectOwnerAction.bind(null, locale, workspace.slug)}
     />
   );
 }

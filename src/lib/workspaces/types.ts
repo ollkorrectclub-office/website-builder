@@ -120,11 +120,13 @@ export type WorkspaceMemberEventType =
   | "invitation_resent"
   | "member_deactivated"
   | "member_reactivated"
-  | "owner_transferred";
+  | "owner_transferred"
+  | "project_owner_reassigned";
 
 export interface WorkspaceMemberEventRecord {
   id: string;
   workspaceId: string;
+  projectId: string | null;
   membershipId: string | null;
   invitationId: string | null;
   memberUserId: string | null;
@@ -156,6 +158,11 @@ export interface WorkspaceProjectOwnershipVisibilityRecord {
   projectOwnerMembershipStatus: WorkspaceMemberStatus | null;
   isWorkspaceOwner: boolean;
   needsOwnershipReview: boolean;
+}
+
+export interface UpdateProjectOwnerInput {
+  projectId: string;
+  ownerUserId: string;
 }
 
 export interface ProjectPermissionsRecord {

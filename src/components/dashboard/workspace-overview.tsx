@@ -34,6 +34,7 @@ export function WorkspaceOverview({
   revokeInvitationAction,
   resendInvitationAction,
   transferOwnerAction,
+  reassignProjectOwnerAction,
 }: {
   locale: Locale;
   dictionary: Dictionary;
@@ -47,6 +48,7 @@ export function WorkspaceOverview({
   revokeInvitationAction: (state: FormState, formData: FormData) => Promise<FormState>;
   resendInvitationAction: (state: FormState, formData: FormData) => Promise<FormState>;
   transferOwnerAction: (state: FormState, formData: FormData) => Promise<FormState>;
+  reassignProjectOwnerAction: (state: FormState, formData: FormData) => Promise<FormState>;
 }) {
   return (
     <div className="space-y-6">
@@ -174,6 +176,7 @@ export function WorkspaceOverview({
         revokeInvitationAction={revokeInvitationAction}
         resendInvitationAction={resendInvitationAction}
         transferOwnerAction={transferOwnerAction}
+        reassignProjectOwnerAction={reassignProjectOwnerAction}
       />
     </div>
   );

@@ -260,6 +260,8 @@ function displayEventTitle(
       return locale === "sq"
         ? `Model adapter run ${String(event.metadata.status ?? "")}`
         : `Model adapter run ${String(event.metadata.status ?? "")}`;
+    case "project_owner_reassigned":
+      return event.title;
     default:
       if (event.kind === "visual_scaffold" && pageCount > 0 && scaffoldSourceRevisionNumber > 0) {
         return locale === "sq"
@@ -752,6 +754,19 @@ function metadataLines(
       label: dictionary.builder.timeline.metadata.device,
       value: dictionary.builder.preview.devices[event.linkContext.previewDevice],
     });
+  }
+
+  if (event.kind === "project_owner_reassigned") {
+    lines.push(
+      {
+        label: locale === "sq" ? "Pronari i mëparshëm" : "Previous owner",
+        value: String(event.metadata.previousOwnerName ?? event.metadata.previousOwnerEmail ?? "—"),
+      },
+      {
+        label: locale === "sq" ? "Pronari i ri" : "New owner",
+        value: String(event.metadata.nextOwnerName ?? event.metadata.nextOwnerEmail ?? "—"),
+      },
+    );
   }
 
   return lines;

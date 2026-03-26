@@ -229,6 +229,7 @@ export type AuditTimelineEventKind =
   | "deploy_execution_retried"
   | "adapter_config_updated"
   | "model_adapter_run"
+  | "project_owner_reassigned"
   | "preview_state";
 export type AuditTimelineActorType = "system" | "user" | "assistant" | "runtime";
 

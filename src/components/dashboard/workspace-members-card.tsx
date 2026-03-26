@@ -149,6 +149,8 @@ function lifecycleEventLabel(locale: Locale, dictionary: Dictionary, event: Work
       return locale === "sq"
         ? `Ownership-i u transferua te ${event.memberName}`
         : `Ownership was transferred to ${event.memberName}`;
+    case "project_owner_reassigned":
+      return event.summary;
   }
 }
 
@@ -164,6 +166,8 @@ function eventTone(eventType: WorkspaceMemberEventRecord["eventType"]) {
       return "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200";
     case "invitation_resent":
       return "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-200";
+    case "project_owner_reassigned":
+      return "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200";
     case "invitation_created":
       return "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200";
     case "invitation_accepted":
@@ -193,6 +197,8 @@ function eventLabel(locale: Locale, eventType: WorkspaceMemberEventRecord["event
       return locale === "sq" ? "Riaktivizuar" : "Reactivated";
     case "owner_transferred":
       return locale === "sq" ? "Transferim owner" : "Owner transfer";
+    case "project_owner_reassigned":
+      return locale === "sq" ? "Project owner" : "Project owner";
   }
 }
 
@@ -541,16 +547,134 @@ function ProjectOwnershipVisibilityCard({
   );
 }
 
+function ProjectOwnershipReassignmentRow({
+  locale,
+  dictionary,
+  workspaceSlug,
+  entry,
+  activeMembers,
+  canManage,
+  reassignProjectOwnerAction,
+}: {
+  locale: Locale;
+  dictionary: Dictionary;
+  workspaceSlug: string;
+  entry: WorkspaceMemberManagementBundle["projectOwnerships"][number];
+  activeMembers: WorkspaceMemberDirectoryEntryRecord[];
+  canManage: boolean;
+  reassignProjectOwnerAction: MemberAction;
+}) {
+  const [state, formAction] = useActionState(reassignProjectOwnerAction, initialFormState);
+  const canReassign = canManage && activeMembers.length > 0;
+
+  return (
+    <div
+      className="rounded-[18px] border border-border bg-card/70 px-4 py-4"
+      data-testid={`workspace-project-ownership-review-row-${entry.projectId}`}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge>{entry.projectName}</Badge>
+        <Badge
+          className={
+            entry.needsOwnershipReview
+              ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+              : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200"
+          }
+        >
+          {entry.needsOwnershipReview
+            ? dictionary.dashboard.members.projectOwnershipNeedsReview
+            : dictionary.dashboard.members.projectOwnershipAligned}
+        </Badge>
+        {entry.projectOwnerMembershipStatus === "deactivated" ? (
+          <Badge className="bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200">
+            {dictionary.dashboard.members.projectOwnershipDeactivatedOwnerBadge}
+          </Badge>
+        ) : null}
+      </div>
+      <p className="mt-3 text-sm font-semibold text-card-foreground">{entry.projectOwnerName}</p>
+      <p className="mt-2 text-xs text-muted-foreground">{entry.projectOwnerEmail}</p>
+      <p className="mt-2 text-xs text-muted-foreground">
+        {entry.projectOwnerMembershipStatus === "deactivated"
+          ? dictionary.dashboard.members.projectOwnershipDeactivatedOwnerCopy
+          : entry.needsOwnershipReview
+            ? dictionary.dashboard.members.projectOwnershipReviewHint
+            : dictionary.dashboard.members.projectOwnershipAlignedCopy}
+      </p>
+
+      <form action={formAction} className="mt-4 space-y-3" data-testid={`workspace-project-owner-reassign-form-${entry.projectId}`}>
+        <input type="hidden" name="projectId" value={entry.projectId} />
+        <label className="block space-y-2 text-sm">
+          <span className="text-muted-foreground">{dictionary.dashboard.members.projectOwnershipReassignTargetLabel}</span>
+          <select
+            name="targetMembershipId"
+            defaultValue=""
+            className={fieldClass()}
+            disabled={!canReassign}
+            data-testid={`workspace-project-owner-target-${entry.projectId}`}
+          >
+            <option value="">{dictionary.dashboard.members.projectOwnershipReassignSelectPlaceholder}</option>
+            {activeMembers.map((member) => (
+              <option key={member.membershipId} value={member.membershipId}>
+                {member.fullName} · {workspaceRoleLabels[member.role][locale]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block space-y-2 text-sm">
+          <span className="text-muted-foreground">{dictionary.dashboard.members.projectOwnershipReassignConfirmationLabel}</span>
+          <input
+            name="confirmation"
+            placeholder={entry.projectSlug}
+            className={fieldClass()}
+            disabled={!canReassign}
+            data-testid={`workspace-project-owner-confirmation-${entry.projectId}`}
+          />
+          <p className="text-xs text-muted-foreground">
+            {dictionary.dashboard.members.projectOwnershipReassignConfirmationHint}
+          </p>
+        </label>
+        <div className="flex flex-wrap items-center gap-3">
+          <MemberActionButton
+            label={dictionary.dashboard.members.projectOwnershipReassignAction}
+            pendingLabel={dictionary.dashboard.members.projectOwnershipReassigningAction}
+            disabled={!canReassign}
+            testId={`workspace-project-owner-submit-${entry.projectId}`}
+          />
+          <Link
+            href={projectBaseRoute(locale, workspaceSlug, entry.projectSlug)}
+            className="text-sm font-semibold text-primary transition hover:text-primary/80"
+            data-testid={`workspace-project-ownership-review-link-${entry.projectId}`}
+          >
+            {dictionary.dashboard.members.projectOwnershipReviewAction}
+          </Link>
+        </div>
+        {state.message ? (
+          <p className={`text-xs ${state.status === "error" ? "text-red-600 dark:text-red-300" : "text-emerald-700 dark:text-emerald-300"}`}>
+            {state.message}
+          </p>
+        ) : null}
+        {!canReassign ? (
+          <p className="text-xs text-muted-foreground">{dictionary.dashboard.members.readOnlyCopy}</p>
+        ) : null}
+      </form>
+    </div>
+  );
+}
+
 function ProjectOwnershipAlignmentCard({
   locale,
   dictionary,
   bundle,
+  reassignProjectOwnerAction,
 }: {
   locale: Locale;
   dictionary: Dictionary;
   bundle: WorkspaceMemberManagementBundle;
+  reassignProjectOwnerAction: MemberAction;
 }) {
-  const reviewEntries = bundle.projectOwnerships.filter((entry) => entry.needsOwnershipReview);
+  const reviewEntries = bundle.projectOwnerships;
+  const canManage = bundle.permissions.canManageWorkspace;
+  const activeMembers = bundle.members.filter((member) => member.status === "active");
 
   return (
     <Card
@@ -565,39 +689,16 @@ function ProjectOwnershipAlignmentCard({
       <div className="mt-4 space-y-3">
         {reviewEntries.length > 0 ? (
           reviewEntries.map((entry) => (
-            <div
+            <ProjectOwnershipReassignmentRow
               key={entry.projectId}
-              className="rounded-[18px] border border-border bg-card/70 px-4 py-4"
-              data-testid={`workspace-project-ownership-review-row-${entry.projectId}`}
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge>{entry.projectName}</Badge>
-                <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
-                  {dictionary.dashboard.members.projectOwnershipNeedsReview}
-                </Badge>
-                {entry.projectOwnerMembershipStatus === "deactivated" ? (
-                  <Badge className="bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200">
-                    {dictionary.dashboard.members.projectOwnershipDeactivatedOwnerBadge}
-                  </Badge>
-                ) : null}
-              </div>
-              <p className="mt-3 text-sm font-semibold text-card-foreground">{entry.projectOwnerName}</p>
-              <p className="mt-2 text-xs text-muted-foreground">{entry.projectOwnerEmail}</p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                {entry.projectOwnerMembershipStatus === "deactivated"
-                  ? dictionary.dashboard.members.projectOwnershipDeactivatedOwnerCopy
-                  : dictionary.dashboard.members.projectOwnershipReviewHint}
-              </p>
-              <div className="mt-4">
-                <Link
-                  href={projectBaseRoute(locale, bundle.workspace.slug, entry.projectSlug)}
-                  className="text-sm font-semibold text-primary transition hover:text-primary/80"
-                  data-testid={`workspace-project-ownership-review-link-${entry.projectId}`}
-                >
-                  {dictionary.dashboard.members.projectOwnershipReviewAction}
-                </Link>
-              </div>
-            </div>
+              locale={locale}
+              dictionary={dictionary}
+              workspaceSlug={bundle.workspace.slug}
+              entry={entry}
+              activeMembers={activeMembers}
+              canManage={canManage}
+              reassignProjectOwnerAction={reassignProjectOwnerAction}
+            />
           ))
         ) : (
           <p className="text-sm leading-6 text-muted-foreground">
@@ -690,6 +791,7 @@ export function WorkspaceMembersCard({
   revokeInvitationAction,
   resendInvitationAction,
   transferOwnerAction,
+  reassignProjectOwnerAction,
 }: {
   locale: Locale;
   dictionary: Dictionary;
@@ -701,6 +803,7 @@ export function WorkspaceMembersCard({
   revokeInvitationAction: MemberAction;
   resendInvitationAction: MemberAction;
   transferOwnerAction: MemberAction;
+  reassignProjectOwnerAction: MemberAction;
 }) {
   const [inviteState, inviteFormAction] = useActionState(inviteMemberAction, initialFormState);
   const canManageMembers = bundle.permissions.canManageWorkspace;
@@ -842,27 +945,49 @@ export function WorkspaceMembersCard({
             />
 
             <ProjectOwnershipVisibilityCard locale={locale} dictionary={dictionary} bundle={bundle} />
-            <ProjectOwnershipAlignmentCard locale={locale} dictionary={dictionary} bundle={bundle} />
+            <ProjectOwnershipAlignmentCard
+              locale={locale}
+              dictionary={dictionary}
+              bundle={bundle}
+              reassignProjectOwnerAction={reassignProjectOwnerAction}
+            />
 
             <Card className="border-border bg-background/70 px-5 py-5 shadow-none">
               <p className="text-sm font-semibold text-card-foreground">{dictionary.dashboard.members.activityTitle}</p>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">{dictionary.dashboard.members.activityCopy}</p>
               <div className="mt-4 space-y-3">
                 {bundle.events.length > 0 ? (
-                  bundle.events.slice(0, 10).map((event) => (
-                    <div key={event.id} className="rounded-[18px] border border-border bg-card/70 px-4 py-4">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge className={eventTone(event.eventType)}>{eventLabel(locale, event.eventType)}</Badge>
-                        <Badge className="bg-card/80">{workspaceRoleLabels[event.nextRole][locale]}</Badge>
+                  bundle.events.slice(0, 10).map((event) => {
+                    const linkedProject = event.projectId
+                      ? bundle.projectOwnerships.find((entry) => entry.projectId === event.projectId) ?? null
+                      : null;
+
+                    return (
+                      <div key={event.id} className="rounded-[18px] border border-border bg-card/70 px-4 py-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge className={eventTone(event.eventType)}>{eventLabel(locale, event.eventType)}</Badge>
+                          <Badge className="bg-card/80">{workspaceRoleLabels[event.nextRole][locale]}</Badge>
+                        </div>
+                        <p className="mt-3 text-sm font-semibold text-card-foreground">
+                          {lifecycleEventLabel(locale, dictionary, event)}
+                        </p>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          {event.actorLabel} · {formatDateTimeLabel(event.occurredAt, locale)}
+                        </p>
+                        {linkedProject ? (
+                          <div className="mt-3">
+                            <Link
+                              href={projectBaseRoute(locale, bundle.workspace.slug, linkedProject.projectSlug)}
+                              className="text-xs font-semibold text-primary transition hover:text-primary/80"
+                              data-testid={`workspace-activity-project-link-${event.id}`}
+                            >
+                              {dictionary.dashboard.members.projectOwnershipReviewAction}
+                            </Link>
+                          </div>
+                        ) : null}
                       </div>
-                      <p className="mt-3 text-sm font-semibold text-card-foreground">
-                        {lifecycleEventLabel(locale, dictionary, event)}
-                      </p>
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        {event.actorLabel} · {formatDateTimeLabel(event.occurredAt, locale)}
-                      </p>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <p className="text-sm leading-6 text-muted-foreground">{dictionary.dashboard.members.noActivity}</p>
                 )}

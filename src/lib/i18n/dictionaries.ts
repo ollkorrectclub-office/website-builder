@@ -259,6 +259,9 @@ export const dictionaries = {
         projectOwnershipReviewCopy:
           "Pas transferimit të workspace owner-it, këto projekte mund të kërkojnë rishikim manual nëse dëshiron t'i përafron pronësitë. Nuk bëhet reasignim automatik.",
         projectOwnershipNeedsReview: "Kërkon review",
+        projectOwnershipAligned: "I përafruar",
+        projectOwnershipAlignedCopy:
+          "Ky projekt tashmë përputhet me workspace owner-in aktual, por reasignimi manual mbetet i mundur nëse duhet.",
         projectOwnershipReviewHint:
           "Hape projektin për të rishikuar nëse ownership-i duhet të përafrohet me owner-in e ri të workspace-it.",
         projectOwnershipReviewAction: "Hap review-n e projektit",
@@ -267,11 +270,18 @@ export const dictionaries = {
         projectOwnershipDeactivatedOwnerBadge: "Owner i çaktivizuar",
         projectOwnershipDeactivatedOwnerCopy:
           "Ky projekt lidhet ende me një owner të çaktivizuar. Rishikoje para reasignimeve manuale.",
+        projectOwnershipReassignTargetLabel: "Owner-i i ri i projektit",
+        projectOwnershipReassignSelectPlaceholder: "Zgjidh një anëtar aktiv",
+        projectOwnershipReassignConfirmationLabel: "Konfirmo slug-un e projektit",
+        projectOwnershipReassignConfirmationHint:
+          "Për siguri, shkruaj slug-un e projektit para reasignimit manual të owner-it.",
+        projectOwnershipReassignAction: "Reasigno owner-in",
+        projectOwnershipReassigningAction: "Po reasignohet owner-i...",
         currentUserBadge: "Ti",
         joinedAt: "U bashkua",
         activityTitle: "Aktiviteti i roleve",
         activityCopy:
-          "Ky log ruan ftesat, ridërgimet, revokimet, pranimin, ndryshimet e roleve, çaktivizimet, riaktivizimet dhe transferimet e ownership-it për këtë workspace.",
+          "Ky log ruan ftesat, ridërgimet, revokimet, pranimin, ndryshimet e roleve, çaktivizimet, riaktivizimet, transferimet e ownership-it dhe reasignimet e project owner-it për këtë workspace.",
         noActivity: "Nuk ka ende ndryshime të ruajtura në ekipin e workspace-it.",
         activityUnknownRole: "rol i panjohur",
       },
@@ -1892,6 +1902,9 @@ export const dictionaries = {
         projectOwnershipReviewCopy:
           "After a workspace ownership transfer, these projects may need manual review if you want project ownership to align later. No reassignment happens automatically here.",
         projectOwnershipNeedsReview: "Needs review",
+        projectOwnershipAligned: "Aligned",
+        projectOwnershipAlignedCopy:
+          "This project already aligns with the current workspace owner, but manual reassignment is still available if needed.",
         projectOwnershipReviewHint:
           "Open the project to review whether ownership should be aligned with the new workspace owner.",
         projectOwnershipReviewAction: "Open project review",
@@ -1900,11 +1913,18 @@ export const dictionaries = {
         projectOwnershipDeactivatedOwnerBadge: "Deactivated owner",
         projectOwnershipDeactivatedOwnerCopy:
           "This project is still linked to a deactivated owner. Review it before any manual reassignment.",
+        projectOwnershipReassignTargetLabel: "New project owner",
+        projectOwnershipReassignSelectPlaceholder: "Choose an active member",
+        projectOwnershipReassignConfirmationLabel: "Confirm the project slug",
+        projectOwnershipReassignConfirmationHint:
+          "For safety, enter the project slug before manually reassigning ownership.",
+        projectOwnershipReassignAction: "Reassign owner",
+        projectOwnershipReassigningAction: "Reassigning owner...",
         currentUserBadge: "You",
         joinedAt: "Joined",
         activityTitle: "Role activity",
         activityCopy:
-          "This log keeps invitations, resends, revocations, acceptances, role changes, deactivations, reactivations, and ownership transfers for the workspace in a clear audit trail.",
+          "This log keeps invitations, resends, revocations, acceptances, role changes, deactivations, reactivations, ownership transfers, and project-owner reassignments for the workspace in a clear audit trail.",
         noActivity: "No saved team changes yet for this workspace.",
         activityUnknownRole: "unknown role",
       },

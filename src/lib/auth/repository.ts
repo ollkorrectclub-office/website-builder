@@ -104,6 +104,7 @@ function mapWorkspaceMemberEventRow(row: Record<string, unknown>): WorkspaceMemb
   return {
     id: String(row.id),
     workspaceId: String(row.workspace_id),
+    projectId: row.project_id ? String(row.project_id) : null,
     membershipId: row.membership_id ? String(row.membership_id) : null,
     invitationId: row.invitation_id ? String(row.invitation_id) : null,
     memberUserId: row.member_user_id ? String(row.member_user_id) : null,
@@ -1033,6 +1034,7 @@ async function appendWorkspaceMemberEventSupabase(event: WorkspaceMemberEventRec
   const { error } = await client.from("workspace_member_events").insert({
     id: event.id,
     workspace_id: event.workspaceId,
+    project_id: event.projectId,
     membership_id: event.membershipId,
     invitation_id: event.invitationId,
     member_user_id: event.memberUserId,

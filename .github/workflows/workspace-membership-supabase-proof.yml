@@ -1,0 +1,81 @@
+name: Workspace Membership Supabase Proof
+
+on:
+  workflow_dispatch:
+
+jobs:
+  workspace-membership-secret-gates:
+    name: Resolve workspace membership secret gates
+    runs-on: ubuntu-latest
+    outputs:
+      supabase_membership_enabled: ${{ steps.resolve.outputs.supabase_membership_enabled }}
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      BESA_E2E_SUPABASE_OWNER_EMAIL: ${{ secrets.BESA_E2E_SUPABASE_OWNER_EMAIL }}
+      BESA_E2E_SUPABASE_OWNER_PASSWORD: ${{ secrets.BESA_E2E_SUPABASE_OWNER_PASSWORD }}
+      BESA_E2E_SUPABASE_WORKSPACE_SLUG: ${{ secrets.BESA_E2E_SUPABASE_WORKSPACE_SLUG }}
+      BESA_E2E_SUPABASE_PROJECT_SLUG: ${{ secrets.BESA_E2E_SUPABASE_PROJECT_SLUG }}
+    steps:
+      - name: Resolve secret-gated workspace membership job
+        id: resolve
+        shell: bash
+        run: |
+          supabase_membership_enabled=false
+
+          if [[ -n "${NEXT_PUBLIC_SUPABASE_URL}" && -n "${SUPABASE_SERVICE_ROLE_KEY}" && -n "${BESA_E2E_SUPABASE_OWNER_EMAIL}" && -n "${BESA_E2E_SUPABASE_OWNER_PASSWORD}" && -n "${BESA_E2E_SUPABASE_WORKSPACE_SLUG}" && -n "${BESA_E2E_SUPABASE_PROJECT_SLUG}" ]]; then
+            supabase_membership_enabled=true
+          fi
+
+          echo "supabase_membership_enabled=${supabase_membership_enabled}" >> "${GITHUB_OUTPUT}"
+
+  workspace-membership-supabase-proof:
+    name: Workspace membership (Supabase proof)
+    needs:
+      - workspace-membership-secret-gates
+    if: ${{ needs.workspace-membership-secret-gates.outputs.supabase_membership_enabled == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      BESA_E2E_OUTPUT_DIR: .artifacts/workspace-membership-supabase-proof/test-results
+      BESA_E2E_HTML_REPORT_DIR: .artifacts/workspace-membership-supabase-proof/playwright-report
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      BESA_E2E_SUPABASE_OWNER_EMAIL: ${{ secrets.BESA_E2E_SUPABASE_OWNER_EMAIL }}
+      BESA_E2E_SUPABASE_OWNER_PASSWORD: ${{ secrets.BESA_E2E_SUPABASE_OWNER_PASSWORD }}
+      BESA_E2E_SUPABASE_WORKSPACE_SLUG: ${{ secrets.BESA_E2E_SUPABASE_WORKSPACE_SLUG }}
+      BESA_E2E_SUPABASE_PROJECT_SLUG: ${{ secrets.BESA_E2E_SUPABASE_PROJECT_SLUG }}
+      BESA_E2E_SUPABASE_LOCALE: ${{ secrets.BESA_E2E_SUPABASE_LOCALE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Supabase workspace membership proof
+        run: npm run verify:workspace-membership:supabase
+
+      - name: Upload Playwright report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace-membership-supabase-proof-playwright-report
+          if-no-files-found: ignore
+          path: .artifacts/workspace-membership-supabase-proof/playwright-report
+
+      - name: Upload test-results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace-membership-supabase-proof-test-results
+          if-no-files-found: ignore
+          path: .artifacts/workspace-membership-supabase-proof/test-results

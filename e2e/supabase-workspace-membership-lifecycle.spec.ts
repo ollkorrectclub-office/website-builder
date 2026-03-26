@@ -35,9 +35,12 @@ async function createInvitation(page: Page, input: { email: string; role: "viewe
 }
 
 async function invitationRow(page: Page, email: string) {
+  const emailLocator = page.getByText(email, { exact: true }).first();
+  await expect(emailLocator).toBeVisible();
+
   const row = page
     .locator('[data-testid^="workspace-invitation-row-"]')
-    .filter({ hasText: email })
+    .filter({ has: emailLocator })
     .first();
   await expect(row).toBeVisible();
   return row;

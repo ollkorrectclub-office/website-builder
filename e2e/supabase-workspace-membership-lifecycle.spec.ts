@@ -10,9 +10,9 @@ function inviteeIdentity() {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   return {
-    email: `phase51-supabase-${suffix}@besa-e2e.test`,
-    fullName: "Phase 51 Supabase Invitee",
-    password: "phase51-supabase-pass",
+    email: `phase52-supabase-${suffix}@besa-e2e.test`,
+    fullName: "Phase 52 Supabase Invitee",
+    password: "phase52-supabase-pass",
   };
 }
 
@@ -81,6 +81,7 @@ test.describe.serial("supabase workspace membership lifecycle", () => {
 
     const invitationRow = await firstInvitationRow(page);
     await expect(invitationRow).toContainText(invitee.email);
+    await expect(invitationRow).toContainText(/Stored link|Link i ruajtur/i);
     const inviteHref = await invitationRow.locator('[data-testid^="workspace-invitation-link-"]').getAttribute("href");
 
     if (!inviteHref) {
@@ -107,11 +108,17 @@ test.describe.serial("supabase workspace membership lifecycle", () => {
     await expect(page.getByTestId("workspace-project-ownership-card")).toContainText(
       /Different from workspace owner|Ndryshe nga workspace owner/i,
     );
+    await expect(page.getByTestId("workspace-project-ownership-review-card")).toContainText(
+      /Needs review|Kërkon review/i,
+    );
 
     await inviteeSession.page.goto(workspaceManagePath);
     await expect(inviteeSession.page.getByTestId("workspace-owner-transfer-submit")).toBeEnabled();
     await expect(inviteeSession.page.getByTestId("workspace-project-ownership-card")).toContainText(
       /Different from workspace owner|Ndryshe nga workspace owner/i,
+    );
+    await expect(inviteeSession.page.getByTestId("workspace-project-ownership-review-card")).toContainText(
+      /Needs review|Kërkon review/i,
     );
 
     await inviteeSession.context.close();

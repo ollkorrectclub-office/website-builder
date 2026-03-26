@@ -7,6 +7,7 @@ import { useFormStatus } from "react-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { projectBaseRoute } from "@/lib/builder/routes";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
 import type { Locale } from "@/lib/i18n/locales";
 import { initialFormState } from "@/lib/workspaces/form-state";
@@ -23,7 +24,7 @@ import type {
   WorkspaceMemberManagementBundle,
   WorkspaceRole,
 } from "@/lib/workspaces/types";
-import { formatDateTimeLabel } from "@/lib/workspaces/utils";
+import { formatDateTimeLabel, getWorkspaceInvitationDisplayStatus } from "@/lib/workspaces/utils";
 
 type MemberAction = (state: FormState, formData: FormData) => Promise<FormState>;
 
@@ -62,6 +63,48 @@ function countByStatus(
   status: WorkspaceMemberDirectoryEntryRecord["status"],
 ) {
   return members.filter((member) => member.status === status).length;
+}
+
+function invitationDisplayLabel(
+  locale: Locale,
+  dictionary: Dictionary,
+  invitation: WorkspaceInvitationRecord,
+) {
+  const displayStatus = getWorkspaceInvitationDisplayStatus(invitation);
+
+  if (displayStatus === "expired") {
+    return dictionary.dashboard.members.inviteExpiredBadge;
+  }
+
+  return workspaceInvitationStatusLabels[invitation.status][locale];
+}
+
+function invitationDeliveryLabel(locale: Locale, invitation: WorkspaceInvitationRecord) {
+  return invitation.deliveryChannel === "stored_link"
+    ? locale === "sq"
+      ? "Link i ruajtur"
+      : "Stored link"
+    : locale === "sq"
+      ? "Dërgesë"
+      : "Delivery";
+}
+
+function buildInvitationLineage(
+  invitation: WorkspaceInvitationRecord,
+  invitations: WorkspaceInvitationRecord[],
+) {
+  const invitationsById = new Map(invitations.map((entry) => [entry.id, entry]));
+  const lineage: WorkspaceInvitationRecord[] = [];
+  let current: WorkspaceInvitationRecord | null = invitation;
+
+  while (current) {
+    lineage.unshift(current);
+    current = current.resentFromInvitationId
+      ? (invitationsById.get(current.resentFromInvitationId) ?? null)
+      : null;
+  }
+
+  return lineage;
 }
 
 function lifecycleEventLabel(locale: Locale, dictionary: Dictionary, event: WorkspaceMemberEventRecord) {
@@ -284,6 +327,7 @@ function InvitationRow({
   locale,
   dictionary,
   invitation,
+  invitations,
   canManage,
   revokeInvitationAction,
   resendInvitationAction,
@@ -291,6 +335,7 @@ function InvitationRow({
   locale: Locale;
   dictionary: Dictionary;
   invitation: WorkspaceInvitationRecord;
+  invitations: WorkspaceInvitationRecord[];
   canManage: boolean;
   revokeInvitationAction: MemberAction;
   resendInvitationAction: MemberAction;
@@ -298,6 +343,9 @@ function InvitationRow({
   const [revokeState, revokeFormAction] = useActionState(revokeInvitationAction, initialFormState);
   const [resendState, resendFormAction] = useActionState(resendInvitationAction, initialFormState);
   const inviteHref = `/${locale}/invite/${invitation.invitationToken}`;
+  const displayStatus = getWorkspaceInvitationDisplayStatus(invitation);
+  const lineage = buildInvitationLineage(invitation, invitations);
+  const currentAttempt = lineage.findIndex((entry) => entry.id === invitation.id) + 1;
   const canRevoke = canManage && invitation.status === "pending";
   const canResend = canManage && invitation.status !== "accepted";
 
@@ -305,12 +353,31 @@ function InvitationRow({
     <div className="rounded-[18px] border border-border bg-card/70 px-4 py-4" data-testid={`workspace-invitation-row-${invitation.id}`}>
       <div className="flex flex-wrap items-center gap-2">
         <Badge>{workspaceRoleLabels[invitation.role][locale]}</Badge>
-        <Badge className="bg-card/80">{workspaceInvitationStatusLabels[invitation.status][locale]}</Badge>
+        <Badge className={displayStatus === "expired" ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200" : "bg-card/80"}>
+          {invitationDisplayLabel(locale, dictionary, invitation)}
+        </Badge>
+        <Badge className="bg-card/80">{invitationDeliveryLabel(locale, invitation)}</Badge>
       </div>
       <p className="mt-3 text-sm font-semibold text-card-foreground">{invitation.email}</p>
       <p className="mt-2 text-xs text-muted-foreground">
         {formatDateTimeLabel(invitation.createdAt, locale)}
       </p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <p className="text-xs text-muted-foreground" data-testid={`workspace-invitation-attempt-${invitation.id}`}>
+          {dictionary.dashboard.members.inviteAttemptLabel}: #{currentAttempt}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {dictionary.dashboard.members.inviteSentAt}: {formatDateTimeLabel(invitation.lastSentAt, locale)}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {dictionary.dashboard.members.inviteExpiresAt}: {formatDateTimeLabel(invitation.expiresAt, locale)}
+        </p>
+        {invitation.resentFromInvitationId ? (
+          <p className="text-xs text-muted-foreground">
+            {dictionary.dashboard.members.inviteResentFrom}: #{Math.max(currentAttempt - 1, 1)}
+          </p>
+        ) : null}
+      </div>
       {invitation.acceptedAt ? (
         <p className="mt-2 text-xs text-muted-foreground">
           {dictionary.dashboard.members.inviteAcceptedAt}: {formatDateTimeLabel(invitation.acceptedAt, locale)}
@@ -320,6 +387,28 @@ function InvitationRow({
         <p className="mt-2 text-xs text-muted-foreground">
           {dictionary.dashboard.members.inviteRevokedAt}: {formatDateTimeLabel(invitation.revokedAt, locale)}
         </p>
+      ) : null}
+      {displayStatus === "expired" ? (
+        <p
+          className="mt-2 rounded-2xl border border-amber-300/50 bg-amber-100/60 px-3 py-3 text-xs text-amber-900 dark:border-amber-700/40 dark:bg-amber-950/40 dark:text-amber-200"
+          data-testid={`workspace-invitation-expired-${invitation.id}`}
+        >
+          {dictionary.dashboard.members.inviteExpiredCopy}
+        </p>
+      ) : null}
+      {lineage.length > 1 ? (
+        <div className="mt-3 rounded-[18px] border border-border bg-background/60 px-3 py-3">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+            {dictionary.dashboard.members.inviteHistoryTitle}
+          </p>
+          <div className="mt-2 space-y-2" data-testid={`workspace-invitation-history-${invitation.id}`}>
+            {lineage.map((entry, index) => (
+              <p key={entry.id} className="text-xs text-muted-foreground">
+                {dictionary.dashboard.members.inviteAttemptLabel} #{index + 1} · {formatDateTimeLabel(entry.lastSentAt, locale)}
+              </p>
+            ))}
+          </div>
+        </div>
       ) : null}
       {invitation.status === "pending" ? (
         <div className="mt-4">
@@ -452,6 +541,74 @@ function ProjectOwnershipVisibilityCard({
   );
 }
 
+function ProjectOwnershipAlignmentCard({
+  locale,
+  dictionary,
+  bundle,
+}: {
+  locale: Locale;
+  dictionary: Dictionary;
+  bundle: WorkspaceMemberManagementBundle;
+}) {
+  const reviewEntries = bundle.projectOwnerships.filter((entry) => entry.needsOwnershipReview);
+
+  return (
+    <Card
+      className="border-border bg-background/70 px-5 py-5 shadow-none"
+      data-testid="workspace-project-ownership-review-card"
+    >
+      <p className="text-sm font-semibold text-card-foreground">{dictionary.dashboard.members.projectOwnershipReviewTitle}</p>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+        {dictionary.dashboard.members.projectOwnershipReviewCopy}
+      </p>
+
+      <div className="mt-4 space-y-3">
+        {reviewEntries.length > 0 ? (
+          reviewEntries.map((entry) => (
+            <div
+              key={entry.projectId}
+              className="rounded-[18px] border border-border bg-card/70 px-4 py-4"
+              data-testid={`workspace-project-ownership-review-row-${entry.projectId}`}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge>{entry.projectName}</Badge>
+                <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                  {dictionary.dashboard.members.projectOwnershipNeedsReview}
+                </Badge>
+                {entry.projectOwnerMembershipStatus === "deactivated" ? (
+                  <Badge className="bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200">
+                    {dictionary.dashboard.members.projectOwnershipDeactivatedOwnerBadge}
+                  </Badge>
+                ) : null}
+              </div>
+              <p className="mt-3 text-sm font-semibold text-card-foreground">{entry.projectOwnerName}</p>
+              <p className="mt-2 text-xs text-muted-foreground">{entry.projectOwnerEmail}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {entry.projectOwnerMembershipStatus === "deactivated"
+                  ? dictionary.dashboard.members.projectOwnershipDeactivatedOwnerCopy
+                  : dictionary.dashboard.members.projectOwnershipReviewHint}
+              </p>
+              <div className="mt-4">
+                <Link
+                  href={projectBaseRoute(locale, bundle.workspace.slug, entry.projectSlug)}
+                  className="text-sm font-semibold text-primary transition hover:text-primary/80"
+                  data-testid={`workspace-project-ownership-review-link-${entry.projectId}`}
+                >
+                  {dictionary.dashboard.members.projectOwnershipReviewAction}
+                </Link>
+              </div>
+            </div>
+          ))
+        ) : (
+          <p className="text-sm leading-6 text-muted-foreground">
+            {dictionary.dashboard.members.projectOwnershipReviewEmpty}
+          </p>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function OwnerTransferCard({
   locale,
   dictionary,
@@ -549,7 +706,12 @@ export function WorkspaceMembersCard({
   const canManageMembers = bundle.permissions.canManageWorkspace;
   const activeMembers = countByStatus(bundle.members, "active");
   const deactivatedMembers = countByStatus(bundle.members, "deactivated");
-  const pendingInvitations = bundle.invitations.filter((invitation) => invitation.status === "pending").length;
+  const pendingInvitations = bundle.invitations.filter(
+    (invitation) => getWorkspaceInvitationDisplayStatus(invitation) === "pending",
+  ).length;
+  const expiredInvitations = bundle.invitations.filter(
+    (invitation) => getWorkspaceInvitationDisplayStatus(invitation) === "expired",
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -647,6 +809,11 @@ export function WorkspaceMembersCard({
             <Card className="border-border bg-background/70 px-5 py-5 shadow-none">
               <p className="text-sm font-semibold text-card-foreground">{dictionary.dashboard.members.invitationsTitle}</p>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">{dictionary.dashboard.members.invitationsCopy}</p>
+              {expiredInvitations > 0 ? (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  {dictionary.dashboard.members.inviteExpiredCountLabel}: {expiredInvitations}
+                </p>
+              ) : null}
               <div className="mt-4 space-y-3">
                 {bundle.invitations.length > 0 ? (
                   bundle.invitations.slice(0, 6).map((invitation) => (
@@ -655,6 +822,7 @@ export function WorkspaceMembersCard({
                       locale={locale}
                       dictionary={dictionary}
                       invitation={invitation}
+                      invitations={bundle.invitations}
                       canManage={canManageMembers}
                       revokeInvitationAction={revokeInvitationAction}
                       resendInvitationAction={resendInvitationAction}
@@ -674,6 +842,7 @@ export function WorkspaceMembersCard({
             />
 
             <ProjectOwnershipVisibilityCard locale={locale} dictionary={dictionary} bundle={bundle} />
+            <ProjectOwnershipAlignmentCard locale={locale} dictionary={dictionary} bundle={bundle} />
 
             <Card className="border-border bg-background/70 px-5 py-5 shadow-none">
               <p className="text-sm font-semibold text-card-foreground">{dictionary.dashboard.members.activityTitle}</p>

@@ -5,6 +5,8 @@ export type ProjectStartingMode = "prompt" | "wizard";
 export type WorkspaceRole = "owner" | "admin" | "editor" | "viewer";
 export type WorkspaceMemberStatus = "active" | "deactivated";
 export type WorkspaceInvitationStatus = "pending" | "accepted" | "revoked";
+export type WorkspaceInvitationDeliveryChannel = "stored_link";
+export type WorkspaceInvitationDisplayStatus = WorkspaceInvitationStatus | "expired";
 export type ProjectStatus =
   | "draft"
   | "intake_submitted"
@@ -96,6 +98,11 @@ export interface WorkspaceInvitationRecord {
   role: WorkspaceRole;
   status: WorkspaceInvitationStatus;
   invitationToken: string;
+  deliveryChannel: WorkspaceInvitationDeliveryChannel;
+  deliveryAttemptNumber: number;
+  resentFromInvitationId: string | null;
+  lastSentAt: string;
+  expiresAt: string;
   acceptedByUserId: string | null;
   acceptedMembershipId: string | null;
   acceptedAt: string | null;
@@ -148,6 +155,7 @@ export interface WorkspaceProjectOwnershipVisibilityRecord {
   projectOwnerWorkspaceRole: WorkspaceRole | null;
   projectOwnerMembershipStatus: WorkspaceMemberStatus | null;
   isWorkspaceOwner: boolean;
+  needsOwnershipReview: boolean;
 }
 
 export interface ProjectPermissionsRecord {

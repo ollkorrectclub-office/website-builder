@@ -247,6 +247,9 @@ function buildWorkspaceProjectOwnerships(input: {
         projectOwnerWorkspaceRole: ownerMembership?.role ?? null,
         projectOwnerMembershipStatus: ownerMembership?.status ?? null,
         isWorkspaceOwner: project.ownerUserId === input.workspaceOwnerUserId,
+        needsOwnershipReview:
+          project.ownerUserId !== input.workspaceOwnerUserId ||
+          ownerMembership?.status === "deactivated",
       };
     });
 }

@@ -200,6 +200,15 @@ export const dictionaries = {
         invitationsCopy:
           "Ftesat ruhen si rekorde të qarta lifecycle dhe mund të pranohen nga link-u i tyre i dedikuar.",
         inviteOpenAction: "Hap ftesën",
+        inviteSentAt: "Dërguar më",
+        inviteExpiresAt: "Skadon më",
+        inviteExpiredBadge: "Skaduar",
+        inviteExpiredCopy:
+          "Kjo ftesë ka skaduar. Ruhet ende për audit, por duhet ridërguar me link të ri para pranimit.",
+        inviteExpiredCountLabel: "Ftesa të skaduara",
+        inviteAttemptLabel: "Tentativa",
+        inviteResentFrom: "Ridërguar nga tentativa",
+        inviteHistoryTitle: "Historia e ridërgimeve",
         inviteAcceptedAt: "Pranuar më",
         inviteRevokedAt: "Revokuar më",
         inviteRevokeAction: "Revoko ftesën",
@@ -246,6 +255,18 @@ export const dictionaries = {
         projectOwnershipDiffersCopy:
           "Ky projekt ruan owner-in e vet dhe nuk u transferua automatikisht me workspace ownership.",
         projectOwnershipEmpty: "Nuk ka projekte të ruajtura për këtë workspace.",
+        projectOwnershipReviewTitle: "Ownership alignment review",
+        projectOwnershipReviewCopy:
+          "Pas transferimit të workspace owner-it, këto projekte mund të kërkojnë rishikim manual nëse dëshiron t'i përafron pronësitë. Nuk bëhet reasignim automatik.",
+        projectOwnershipNeedsReview: "Kërkon review",
+        projectOwnershipReviewHint:
+          "Hape projektin për të rishikuar nëse ownership-i duhet të përafrohet me owner-in e ri të workspace-it.",
+        projectOwnershipReviewAction: "Hap review-n e projektit",
+        projectOwnershipReviewEmpty:
+          "Të gjitha projektet e ruajtura tashmë përputhen me owner-in aktual të workspace-it.",
+        projectOwnershipDeactivatedOwnerBadge: "Owner i çaktivizuar",
+        projectOwnershipDeactivatedOwnerCopy:
+          "Ky projekt lidhet ende me një owner të çaktivizuar. Rishikoje para reasignimeve manuale.",
         currentUserBadge: "Ti",
         joinedAt: "U bashkua",
         activityTitle: "Aktiviteti i roleve",
@@ -1812,6 +1833,15 @@ export const dictionaries = {
         invitationsCopy:
           "Invitations are stored as explicit lifecycle records and can be accepted from their dedicated link.",
         inviteOpenAction: "Open invitation",
+        inviteSentAt: "Sent at",
+        inviteExpiresAt: "Expires at",
+        inviteExpiredBadge: "Expired",
+        inviteExpiredCopy:
+          "This invitation has expired. It stays persisted for audit history, but it must be resent with a fresh link before it can be accepted.",
+        inviteExpiredCountLabel: "Expired invitations",
+        inviteAttemptLabel: "Attempt",
+        inviteResentFrom: "Resent from attempt",
+        inviteHistoryTitle: "Resend history",
         inviteAcceptedAt: "Accepted at",
         inviteRevokedAt: "Revoked at",
         inviteRevokeAction: "Revoke invitation",
@@ -1858,6 +1888,18 @@ export const dictionaries = {
         projectOwnershipDiffersCopy:
           "This project keeps its own owner and was not automatically transferred with workspace ownership.",
         projectOwnershipEmpty: "No projects have been stored for this workspace yet.",
+        projectOwnershipReviewTitle: "Ownership alignment review",
+        projectOwnershipReviewCopy:
+          "After a workspace ownership transfer, these projects may need manual review if you want project ownership to align later. No reassignment happens automatically here.",
+        projectOwnershipNeedsReview: "Needs review",
+        projectOwnershipReviewHint:
+          "Open the project to review whether ownership should be aligned with the new workspace owner.",
+        projectOwnershipReviewAction: "Open project review",
+        projectOwnershipReviewEmpty:
+          "All stored projects already align with the current workspace owner.",
+        projectOwnershipDeactivatedOwnerBadge: "Deactivated owner",
+        projectOwnershipDeactivatedOwnerCopy:
+          "This project is still linked to a deactivated owner. Review it before any manual reassignment.",
         currentUserBadge: "You",
         joinedAt: "Joined",
         activityTitle: "Role activity",

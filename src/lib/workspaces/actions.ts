@@ -73,6 +73,7 @@ import {
   updateWorkspaceOwner,
   updateProjectBrief,
 } from "@/lib/workspaces/repository";
+import { getWorkspaceInvitationDisplayStatus } from "@/lib/workspaces/utils";
 import type {
   Country,
   CreateProjectInput,
@@ -340,15 +341,15 @@ function buildProjectOwnershipTransferNote(input: {
   if (input.projects.length === 0) {
     return localized(
       input.locale,
-      "Ky workspace nuk ka projekte aktive për kontroll të ownership-it.",
+      "Ky workspace nuk ka projekte aktive për rishikim të ownership-it.",
       "This workspace has no active projects to review for ownership visibility.",
     );
   }
 
   return localized(
     input.locale,
-    `Project ownership mbetet i ndarë nga workspace ownership: ${ownedByNextWorkspaceOwner} projekt(e) te owner-i i ri, ${ownedByPreviousWorkspaceOwner} te owner-i i mëparshëm dhe ${ownedByOtherMembers} te anëtarë të tjerë. Kontrollo kartelën e project ownership visibility më poshtë.`,
-    `Project ownership stays separate from workspace ownership: ${ownedByNextWorkspaceOwner} project(s) owned by the new workspace owner, ${ownedByPreviousWorkspaceOwner} by the previous owner, and ${ownedByOtherMembers} by other members. Review the project ownership visibility card below.`,
+    `Project ownership mbetet i ndarë nga workspace ownership: ${ownedByNextWorkspaceOwner} projekt(e) te owner-i i ri, ${ownedByPreviousWorkspaceOwner} te owner-i i mëparshëm dhe ${ownedByOtherMembers} te anëtarë të tjerë. Rishiko kartelën e ownership alignment më poshtë nëse do të përgatisësh reasignime manuale.`,
+    `Project ownership stays separate from workspace ownership: ${ownedByNextWorkspaceOwner} project(s) owned by the new workspace owner, ${ownedByPreviousWorkspaceOwner} by the previous owner, and ${ownedByOtherMembers} by other members. Review the ownership alignment card below if you want to prepare manual reassignment.`,
   );
 }
 
@@ -545,12 +546,17 @@ export async function addWorkspaceMemberAction(
     );
 
     if (existingInvitation) {
+      const displayStatus = getWorkspaceInvitationDisplayStatus(existingInvitation);
       return {
         status: "error",
         message: localized(
           locale,
-          "Ekziston tashmë një ftesë aktive për këtë email.",
-          "There is already an active invitation for this email.",
+          displayStatus === "expired"
+            ? "Ekziston tashmë një ftesë e skaduar për këtë email. Përdor ridërgimin nga lista e ftesave që historia e link-ut të ruhet."
+            : "Ekziston tashmë një ftesë aktive për këtë email.",
+          displayStatus === "expired"
+            ? "There is already an expired invitation for this email. Use resend from the invitation list so the delivery history stays intact."
+            : "There is already an active invitation for this email.",
         ),
       };
     }
@@ -560,6 +566,8 @@ export async function addWorkspaceMemberAction(
       invitedByUserId: workspace.currentUser.id,
       email,
       role,
+      deliveryAttemptNumber: 1,
+      resentFromInvitationId: null,
     });
 
     await appendWorkspaceLifecycleEvent({
@@ -802,6 +810,8 @@ export async function resendWorkspaceInvitationAction(
       invitedByUserId: workspace.currentUser.id,
       email: invitation.email,
       role: invitation.role,
+      deliveryAttemptNumber: invitation.deliveryAttemptNumber + 1,
+      resentFromInvitationId: invitation.id,
     });
 
     await appendWorkspaceLifecycleEvent({
@@ -1333,14 +1343,19 @@ export async function acceptWorkspaceInvitationAction(
   }
 
   const { invitation, workspace } = invitationBundle;
+  const invitationDisplayStatus = getWorkspaceInvitationDisplayStatus(invitation);
 
-  if (invitation.status !== "pending") {
+  if (invitationDisplayStatus !== "pending") {
     return {
       status: "error",
       message: localized(
         locale,
-        "Kjo ftesë nuk është më aktive për pranim.",
-        "This invitation is no longer active for acceptance.",
+        invitationDisplayStatus === "expired"
+          ? "Kjo ftesë ka skaduar. Kërko nga owner-i ose admin-i i workspace-it të të dërgojë një link të ri."
+          : "Kjo ftesë nuk është më aktive për pranim.",
+        invitationDisplayStatus === "expired"
+          ? "This invitation has expired. Ask the workspace owner or an admin to send you a fresh link."
+          : "This invitation is no longer active for acceptance.",
       ),
     };
   }

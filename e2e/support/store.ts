@@ -21,7 +21,7 @@ import {
 } from "./env";
 
 const root = process.cwd();
-const runtimeFile = path.join(
+export const runtimeE2EStoreFile = path.join(
   root,
   process.env.BESA_E2E_STORE_FILE ?? path.join(".data", "phase32-e2e-store.json"),
 );
@@ -35,8 +35,8 @@ export async function copyE2EStoreFixture(name: string) {
     return;
   }
 
-  await mkdir(path.dirname(runtimeFile), { recursive: true });
-  await cp(fixturePath(name), runtimeFile);
+  await mkdir(path.dirname(runtimeE2EStoreFile), { recursive: true });
+  await cp(fixturePath(name), runtimeE2EStoreFile);
 }
 
 export async function resetE2EStore() {
@@ -72,7 +72,7 @@ export async function resetDeployExecutionSmokeStore() {
     return;
   }
 
-  const store = JSON.parse(await readFile(runtimeFile, "utf-8")) as {
+  const store = JSON.parse(await readFile(runtimeE2EStoreFile, "utf-8")) as {
     deployTargets: Array<Record<string, unknown>>;
     deployReleases: Array<Record<string, unknown>>;
     deployExecutionRuns: Array<Record<string, unknown>>;
@@ -148,7 +148,7 @@ export async function resetDeployExecutionSmokeStore() {
     );
   });
 
-  await writeFile(runtimeFile, JSON.stringify(store, null, 2), "utf-8");
+  await writeFile(runtimeE2EStoreFile, JSON.stringify(store, null, 2), "utf-8");
 }
 
 export async function resetProviderVerificationStore() {
@@ -158,7 +158,7 @@ export async function resetProviderVerificationStore() {
     return;
   }
 
-  const store = JSON.parse(await readFile(runtimeFile, "utf-8")) as {
+  const store = JSON.parse(await readFile(runtimeE2EStoreFile, "utf-8")) as {
     workspaces: Array<{ id: string; slug: string }>;
     projects: Array<{ id: string; workspaceId: string; slug: string }>;
     modelAdapterConfigs: Array<Record<string, unknown>>;
@@ -196,5 +196,32 @@ export async function resetProviderVerificationStore() {
   ];
   store.modelAdapterRuns = [];
 
-  await writeFile(runtimeFile, JSON.stringify(store, null, 2), "utf-8");
+  await writeFile(runtimeE2EStoreFile, JSON.stringify(store, null, 2), "utf-8");
+}
+
+export async function expireWorkspaceInvitationInLocalStore(email: string) {
+  if (process.env.BESA_E2E_MODE === "supabase") {
+    throw new Error("Local store helpers are not available in Supabase E2E mode.");
+  }
+
+  const store = JSON.parse(await readFile(runtimeE2EStoreFile, "utf-8")) as {
+    workspaceInvitations: Array<Record<string, unknown>>;
+  };
+  const invitation = store.workspaceInvitations.find(
+    (entry) =>
+      typeof entry.email === "string" &&
+      entry.email.toLowerCase() === email.toLowerCase() &&
+      (entry.status === "pending" || typeof entry.status !== "string"),
+  );
+
+  if (!invitation) {
+    throw new Error(`No pending invitation was found for ${email}.`);
+  }
+
+  invitation.expiresAt = "2000-01-01T00:00:00.000Z";
+  invitation.expires_at = invitation.expiresAt;
+  invitation.updatedAt = new Date().toISOString();
+  invitation.updated_at = invitation.updatedAt;
+
+  await writeFile(runtimeE2EStoreFile, JSON.stringify(store, null, 2), "utf-8");
 }

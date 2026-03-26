@@ -9,6 +9,8 @@ import type { Dictionary } from "@/lib/i18n/dictionaries";
 import type { Locale } from "@/lib/i18n/locales";
 import { initialFormState } from "@/lib/workspaces/form-state";
 import type { FormState } from "@/lib/workspaces/form-state";
+import type { WorkspaceInvitationDeliveryChannel, WorkspaceInvitationDisplayStatus } from "@/lib/workspaces/types";
+import { formatDateTimeLabel } from "@/lib/workspaces/utils";
 
 function localized(locale: Locale, sq: string, en: string) {
   return locale === "sq" ? sq : en;
@@ -26,7 +28,11 @@ export function WorkspaceInvitationAcceptCard({
   loginHref,
   invitationEmail,
   roleLabel,
-  invitationStatus,
+  invitationDisplayStatus,
+  invitationLastSentAt,
+  invitationExpiresAt,
+  deliveryChannel,
+  deliveryAttemptNumber,
   hasExistingAccount,
   currentUserEmail,
   acceptAction,
@@ -39,7 +45,11 @@ export function WorkspaceInvitationAcceptCard({
   loginHref: string;
   invitationEmail: string;
   roleLabel: string;
-  invitationStatus: "pending" | "accepted" | "revoked";
+  invitationDisplayStatus: WorkspaceInvitationDisplayStatus;
+  invitationLastSentAt: string;
+  invitationExpiresAt: string;
+  deliveryChannel: WorkspaceInvitationDeliveryChannel;
+  deliveryAttemptNumber: number;
   hasExistingAccount: boolean;
   currentUserEmail: string | null;
   acceptAction: (state: FormState, formData: FormData) => Promise<FormState>;
@@ -47,6 +57,10 @@ export function WorkspaceInvitationAcceptCard({
 }) {
   const [state, formAction] = useActionState(acceptAction, initialFormState);
   const matchesSignedInUser = currentUserEmail === invitationEmail;
+  const deliveryLabel =
+    deliveryChannel === "stored_link"
+      ? localized(locale, "Link i ruajtur", "Stored link")
+      : localized(locale, "Dërgesë", "Delivery");
 
   return (
     <Card className="mx-auto max-w-2xl px-6 py-6">
@@ -61,13 +75,47 @@ export function WorkspaceInvitationAcceptCard({
           `This invitation is for ${invitationEmail} with the ${roleLabel} role.`,
         )}
       </p>
+      <div className="mt-6 grid gap-3 sm:grid-cols-3" data-testid="workspace-invitation-delivery-meta">
+        <div className="rounded-2xl border border-border bg-background/70 px-4 py-4">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+            {localized(locale, "Dërgimi", "Delivery")}
+          </p>
+          <p className="mt-2 text-sm font-semibold text-card-foreground">{deliveryLabel}</p>
+        </div>
+        <div className="rounded-2xl border border-border bg-background/70 px-4 py-4">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+            {localized(locale, "Tentativa", "Attempt")}
+          </p>
+          <p className="mt-2 text-sm font-semibold text-card-foreground">#{deliveryAttemptNumber}</p>
+        </div>
+        <div className="rounded-2xl border border-border bg-background/70 px-4 py-4">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+            {localized(locale, "Skadon", "Expires")}
+          </p>
+          <p className="mt-2 text-sm font-semibold text-card-foreground">
+            {formatDateTimeLabel(invitationExpiresAt, locale)}
+          </p>
+        </div>
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        {localized(locale, "Dërguar më", "Sent at")} {formatDateTimeLabel(invitationLastSentAt, locale)}
+      </p>
 
-      {invitationStatus !== "pending" ? (
+      {invitationDisplayStatus !== "pending" ? (
         <div className="mt-6 space-y-4">
-          <p className="rounded-2xl border border-border bg-background/70 px-4 py-4 text-sm text-muted-foreground">
-            {invitationStatus === "accepted"
+          <p
+            className="rounded-2xl border border-border bg-background/70 px-4 py-4 text-sm text-muted-foreground"
+            data-testid={invitationDisplayStatus === "expired" ? "workspace-invitation-expired-state" : undefined}
+          >
+            {invitationDisplayStatus === "accepted"
               ? localized(locale, "Kjo ftesë është pranuar tashmë.", "This invitation has already been accepted.")
-              : localized(locale, "Kjo ftesë nuk është më aktive.", "This invitation is no longer active.")}
+              : invitationDisplayStatus === "expired"
+                ? localized(
+                    locale,
+                    "Kjo ftesë ka skaduar. Kërko nga owner-i ose admin-i i workspace-it një link të ri.",
+                    "This invitation has expired. Ask the workspace owner or an admin for a fresh link.",
+                  )
+                : localized(locale, "Kjo ftesë nuk është më aktive.", "This invitation is no longer active.")}
           </p>
           <Link href={workspaceHref} className={buttonStyles("primary")}>
             {localized(locale, "Hap workspace-in", "Open workspace")}

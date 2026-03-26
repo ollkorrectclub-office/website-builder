@@ -33,6 +33,7 @@ import { defaultDeployTargetSettings, normalizeDeployTargetSettings } from "@/li
 import type { PlannerArtifactRecord, PlannerRunRecord } from "@/lib/planner/types";
 import { buildPlannerArtifacts, plannerInputFromBrief } from "@/lib/planner/utils";
 import { synthesizeProjectBrief } from "@/lib/workspaces/briefs";
+import { buildWorkspaceInvitationExpiryIso } from "@/lib/workspaces/utils";
 import {
   seededAuthSessions,
   seededCodeStates,
@@ -358,6 +359,50 @@ function normalizeLocalStore(store: Partial<LocalStoreShape>) {
               : typeof invitation.invitation_token === "string"
                 ? invitation.invitation_token
                 : String(invitation.id),
+          deliveryChannel:
+            invitation.deliveryChannel === "stored_link" || invitation.delivery_channel === "stored_link"
+              ? "stored_link"
+              : "stored_link",
+          deliveryAttemptNumber: Math.max(
+            1,
+            Number(
+              invitation.deliveryAttemptNumber ??
+                invitation.delivery_attempt_number ??
+                1,
+            ),
+          ),
+          resentFromInvitationId:
+            typeof invitation.resentFromInvitationId === "string"
+              ? invitation.resentFromInvitationId
+              : typeof invitation.resent_from_invitation_id === "string"
+                ? invitation.resent_from_invitation_id
+                : null,
+          lastSentAt:
+            typeof invitation.lastSentAt === "string"
+              ? invitation.lastSentAt
+              : typeof invitation.last_sent_at === "string"
+                ? invitation.last_sent_at
+                : typeof invitation.createdAt === "string"
+                  ? invitation.createdAt
+                  : typeof invitation.created_at === "string"
+                    ? invitation.created_at
+                    : new Date().toISOString(),
+          expiresAt:
+            typeof invitation.expiresAt === "string"
+              ? invitation.expiresAt
+              : typeof invitation.expires_at === "string"
+                ? invitation.expires_at
+                : buildWorkspaceInvitationExpiryIso(
+                    typeof invitation.lastSentAt === "string"
+                      ? invitation.lastSentAt
+                      : typeof invitation.last_sent_at === "string"
+                        ? invitation.last_sent_at
+                        : typeof invitation.createdAt === "string"
+                          ? invitation.createdAt
+                          : typeof invitation.created_at === "string"
+                            ? invitation.created_at
+                            : new Date().toISOString(),
+                  ),
           acceptedByUserId:
             typeof invitation.acceptedByUserId === "string"
               ? invitation.acceptedByUserId

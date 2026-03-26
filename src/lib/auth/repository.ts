@@ -5,6 +5,7 @@ import { verifyPassword } from "@/lib/auth/password";
 import { buildSessionExpiryIso, clearSessionCookie, readSessionToken, writeSessionCookie } from "@/lib/auth/session";
 import { readLocalStore, writeLocalStore } from "@/lib/workspaces/local-store";
 import { createSupabaseServerClient } from "@/lib/workspaces/supabase";
+import { buildWorkspaceInvitationExpiryIso } from "@/lib/workspaces/utils";
 import type {
   AuthSessionRecord,
   AuthenticatedUserRecord,
@@ -79,6 +80,17 @@ function mapWorkspaceInvitationRow(row: Record<string, unknown>): WorkspaceInvit
     role: row.role as WorkspaceRole,
     status: row.status as WorkspaceInvitationRecord["status"],
     invitationToken: String(row.invitation_token),
+    deliveryChannel:
+      row.delivery_channel === "stored_link" ? "stored_link" : "stored_link",
+    deliveryAttemptNumber: Number(row.delivery_attempt_number ?? 1),
+    resentFromInvitationId: row.resent_from_invitation_id
+      ? String(row.resent_from_invitation_id)
+      : null,
+    lastSentAt: String(row.last_sent_at ?? row.created_at ?? nowIso()),
+    expiresAt: String(
+      row.expires_at ??
+        buildWorkspaceInvitationExpiryIso(String(row.last_sent_at ?? row.created_at ?? nowIso())),
+    ),
     acceptedByUserId: row.accepted_by_user_id ? String(row.accepted_by_user_id) : null,
     acceptedMembershipId: row.accepted_membership_id ? String(row.accepted_membership_id) : null,
     acceptedAt: row.accepted_at ? String(row.accepted_at) : null,
@@ -361,7 +373,7 @@ async function listWorkspaceInvitationsLocal(workspaceId: string) {
 
   return store.workspaceInvitations
     .filter((entry) => entry.workspaceId === workspaceId)
-    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+    .sort((left, right) => right.lastSentAt.localeCompare(left.lastSentAt));
 }
 
 async function getWorkspaceInvitationByTokenLocal(invitationToken: string) {
@@ -374,6 +386,8 @@ async function createWorkspaceInvitationLocal(input: {
   invitedByUserId: string | null;
   email: string;
   role: WorkspaceRole;
+  deliveryAttemptNumber?: number;
+  resentFromInvitationId?: string | null;
 }) {
   const store = await readLocalStore();
   const timestamp = nowIso();
@@ -386,6 +400,11 @@ async function createWorkspaceInvitationLocal(input: {
     role: input.role,
     status: "pending",
     invitationToken: randomBytes(24).toString("hex"),
+    deliveryChannel: "stored_link",
+    deliveryAttemptNumber: input.deliveryAttemptNumber ?? 1,
+    resentFromInvitationId: input.resentFromInvitationId ?? null,
+    lastSentAt: timestamp,
+    expiresAt: buildWorkspaceInvitationExpiryIso(timestamp),
     acceptedByUserId: null,
     acceptedMembershipId: null,
     acceptedAt: null,
@@ -853,7 +872,7 @@ async function listWorkspaceInvitationsSupabase(workspaceId: string) {
     .from("workspace_invitations")
     .select("*")
     .eq("workspace_id", workspaceId)
-    .order("created_at", { ascending: false });
+    .order("last_sent_at", { ascending: false });
 
   if (error) {
     throw new Error(error.message);
@@ -887,12 +906,16 @@ async function createWorkspaceInvitationSupabase(input: {
   invitedByUserId: string | null;
   email: string;
   role: WorkspaceRole;
+  deliveryAttemptNumber?: number;
+  resentFromInvitationId?: string | null;
 }) {
   const client = createSupabaseServerClient();
 
   if (!client) {
     throw new Error("Supabase is not configured.");
   }
+
+  const timestamp = nowIso();
 
   const { data, error } = await client
     .from("workspace_invitations")
@@ -903,6 +926,11 @@ async function createWorkspaceInvitationSupabase(input: {
       role: input.role,
       status: "pending",
       invitation_token: randomBytes(24).toString("hex"),
+      delivery_channel: "stored_link",
+      delivery_attempt_number: input.deliveryAttemptNumber ?? 1,
+      resent_from_invitation_id: input.resentFromInvitationId ?? null,
+      last_sent_at: timestamp,
+      expires_at: buildWorkspaceInvitationExpiryIso(timestamp),
     })
     .select("*")
     .single();
@@ -1192,6 +1220,8 @@ export async function createWorkspaceInvitation(input: {
   invitedByUserId: string | null;
   email: string;
   role: WorkspaceRole;
+  deliveryAttemptNumber?: number;
+  resentFromInvitationId?: string | null;
 }) {
   if (isSupabaseConfigured()) {
     return createWorkspaceInvitationSupabase(input);

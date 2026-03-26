@@ -1,7 +1,7 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
 import { e2eLocale, e2eWorkspaceSlug, isSupabaseE2EMode } from "./support/env";
-import { resetE2EStore } from "./support/store";
+import { expireWorkspaceInvitationInLocalStore, resetE2EStore } from "./support/store";
 
 const workspaceManagePath = `/${e2eLocale}/app/workspaces/${e2eWorkspaceSlug}`;
 const localOwner = { email: "arta@besa.studio", password: "phase1-demo" };
@@ -10,9 +10,9 @@ function inviteeIdentity() {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   return {
-    email: `phase51-${suffix}@besa-e2e.test`,
-    fullName: "Phase 51 Invitee",
-    password: "phase51-invitee-pass",
+    email: `phase52-${suffix}@besa-e2e.test`,
+    fullName: "Phase 52 Invitee",
+    password: "phase52-invitee-pass",
   };
 }
 
@@ -106,6 +106,8 @@ test.describe.serial("workspace membership lifecycle", () => {
 
     const initialInvitationRow = await firstInvitationRow(page);
     await expect(initialInvitationRow).toContainText(invitee.email);
+    await expect(initialInvitationRow).toContainText(/Stored link|Link i ruajtur/i);
+    await expect(initialInvitationRow).toContainText(/Attempt: #1|Tentativa: #1/i);
     await initialInvitationRow.locator('[data-testid^="workspace-invitation-revoke-"]').click();
     await page.waitForLoadState("networkidle");
     await page.goto(workspaceManagePath);
@@ -119,6 +121,10 @@ test.describe.serial("workspace membership lifecycle", () => {
     const resentInvitationRow = await firstInvitationRow(page);
     await expect(resentInvitationRow).toContainText(invitee.email);
     await expect(resentInvitationRow).toContainText(/Pending/i);
+    await expect(resentInvitationRow).toContainText(/Attempt: #2|Tentativa: #2/i);
+    await expect(resentInvitationRow.getByTestId(/workspace-invitation-history-/)).toContainText(
+      /Attempt #1|Tentativa #1/i,
+    );
 
     const inviteHref = await getInvitationHref(resentInvitationRow);
     const inviteeSession = await acceptInvitation(browser, inviteHref, invitee);
@@ -146,13 +152,50 @@ test.describe.serial("workspace membership lifecycle", () => {
     await expect(page.getByTestId("workspace-project-ownership-card")).toContainText(
       /Different from workspace owner|Ndryshe nga workspace owner/i,
     );
+    await expect(page.getByTestId("workspace-project-ownership-review-card")).toBeVisible();
+    await expect(page.getByTestId("workspace-project-ownership-review-card")).toContainText(
+      /Needs review|Kërkon review/i,
+    );
 
     await inviteeSession.page.goto(workspaceManagePath);
     await expect(inviteeSession.page.getByTestId("workspace-owner-transfer-submit")).toBeEnabled();
     await expect(inviteeSession.page.getByTestId("workspace-project-ownership-card")).toContainText(
       /Different from workspace owner|Ndryshe nga workspace owner/i,
     );
+    await expect(inviteeSession.page.getByTestId("workspace-project-ownership-review-card")).toContainText(
+      /Needs review|Kërkon review/i,
+    );
 
     await inviteeSession.context.close();
+  });
+
+  test("shows an explicit expired invitation state and keeps the record available for resend review", async ({
+    page,
+  }) => {
+    const invitee = inviteeIdentity();
+
+    await login(page, localOwner.email, localOwner.password);
+    await page.goto(workspaceManagePath);
+
+    await createInvitation(page, { email: invitee.email, role: "viewer" });
+    await page.goto(workspaceManagePath);
+
+    const invitationRow = await firstInvitationRow(page);
+    const inviteHref = await getInvitationHref(invitationRow);
+
+    await expireWorkspaceInvitationInLocalStore(invitee.email);
+
+    await page.goto(workspaceManagePath);
+    const expiredInvitationRow = await firstInvitationRow(page);
+    await expect(expiredInvitationRow).toContainText(/Expired|Skaduar/i);
+    await expect(expiredInvitationRow.getByTestId(/workspace-invitation-expired-/)).toContainText(
+      /must be resent|duhet ridërguar/i,
+    );
+
+    await page.goto(inviteHref);
+    await expect(page.getByTestId("workspace-invitation-expired-state")).toBeVisible();
+    await expect(page.getByTestId("workspace-invitation-delivery-meta")).toContainText(
+      /Stored link|Link i ruajtur/i,
+    );
   });
 });

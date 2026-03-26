@@ -1,4 +1,11 @@
-import type { PlanRevisionState, ProjectStatus } from "@/lib/workspaces/types";
+import type {
+  PlanRevisionState,
+  ProjectStatus,
+  WorkspaceInvitationDisplayStatus,
+  WorkspaceInvitationRecord,
+} from "@/lib/workspaces/types";
+
+export const WORKSPACE_INVITATION_EXPIRY_DAYS = 7;
 
 export function slugify(value: string) {
   return value
@@ -22,6 +29,34 @@ export function formatDateTimeLabel(value: string, locale: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+export function addDaysToIso(value: string, days: number) {
+  const next = new Date(value);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next.toISOString();
+}
+
+export function buildWorkspaceInvitationExpiryIso(sentAt: string) {
+  return addDaysToIso(sentAt, WORKSPACE_INVITATION_EXPIRY_DAYS);
+}
+
+export function isWorkspaceInvitationExpired(
+  invitation: Pick<WorkspaceInvitationRecord, "status" | "expiresAt">,
+  now: string | number | Date = Date.now(),
+) {
+  if (invitation.status !== "pending") {
+    return false;
+  }
+
+  return new Date(invitation.expiresAt).getTime() <= new Date(now).getTime();
+}
+
+export function getWorkspaceInvitationDisplayStatus(
+  invitation: Pick<WorkspaceInvitationRecord, "status" | "expiresAt">,
+  now: string | number | Date = Date.now(),
+): WorkspaceInvitationDisplayStatus {
+  return isWorkspaceInvitationExpired(invitation, now) ? "expired" : invitation.status;
 }
 
 export function statusTone(status: ProjectStatus) {

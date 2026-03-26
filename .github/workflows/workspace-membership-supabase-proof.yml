@@ -62,7 +62,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run Supabase workspace membership proof
-        run: npm run verify:workspace-membership:supabase
+        run: npm run lint && npm run build && npm run test:e2e:supabase:workspace-membership
 
       - name: Upload Playwright report artifact
         if: always()

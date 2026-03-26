@@ -199,7 +199,9 @@ test.describe.serial("supabase workspace membership lifecycle", () => {
       .locator('[data-testid="timeline-event-card"][data-event-kind="project_owner_reassigned"]')
       .first();
     await expect(reassignmentEvent).toBeVisible();
-    await expect(reassignmentEvent).toContainText(new RegExp(ownerEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+    await expect(reassignmentEvent).toContainText(
+      new RegExp(baseline.ownerFullName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
+    );
     await reassignmentEvent.getByTestId("timeline-open-context").click();
     await page.waitForURL(`**/${e2eProjectSlug}/plan`);
 

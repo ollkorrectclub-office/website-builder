@@ -45,6 +45,7 @@ export interface SupabaseWorkspaceMembershipBaseline {
   workspaceId: string;
   projectId: string;
   projectName: string;
+  ownerFullName: string;
   ownerUserId: string;
   ownerMembershipId: string;
 }
@@ -162,6 +163,7 @@ export async function normalizeSupabaseWorkspaceMembershipBaseline(input: {
     workspaceId: workspace.id,
     projectId: project.id,
     projectName: project.name,
+    ownerFullName: ownerProfile.full_name,
     ownerUserId: ownerProfile.id,
     ownerMembershipId: ownerMembership.id,
   } satisfies SupabaseWorkspaceMembershipBaseline;

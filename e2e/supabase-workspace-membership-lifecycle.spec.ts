@@ -1,6 +1,7 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
 import { e2eLocale, e2eProjectSlug, e2eWorkspaceSlug, isSupabaseE2EMode } from "./support/env";
+import { normalizeSupabaseWorkspaceMembershipBaseline } from "./support/supabase";
 
 const workspaceManagePath = `/${e2eLocale}/app/workspaces/${e2eWorkspaceSlug}`;
 const projectTimelinePath = `/${e2eLocale}/app/workspaces/${e2eWorkspaceSlug}/projects/${e2eProjectSlug}/timeline`;
@@ -33,8 +34,11 @@ async function createInvitation(page: Page, input: { email: string; role: "viewe
   await page.waitForLoadState("networkidle");
 }
 
-async function firstInvitationRow(page: Page) {
-  const row = page.locator('[data-testid^="workspace-invitation-row-"]').first();
+async function invitationRow(page: Page, email: string) {
+  const row = page
+    .locator('[data-testid^="workspace-invitation-row-"]')
+    .filter({ hasText: email })
+    .first();
   await expect(row).toBeVisible();
   return row;
 }
@@ -65,6 +69,37 @@ async function acceptInvitation(
   return { context, page };
 }
 
+async function projectOwnershipReviewRow(page: Page) {
+  const row = page
+    .locator('[data-testid^="workspace-project-ownership-review-row-"]')
+    .filter({
+      has: page.locator(`a[href$="/projects/${e2eProjectSlug}"]`),
+    })
+    .first();
+  await expect(row).toBeVisible();
+  return row;
+}
+
+async function projectOwnershipVisibilityRow(page: Page, projectName: string) {
+  const row = page
+    .locator('[data-testid^="workspace-project-ownership-row-"]')
+    .filter({ hasText: projectName })
+    .first();
+  await expect(row).toBeVisible();
+  return row;
+}
+
+async function projectOwnershipHistoryRow(page: Page) {
+  const row = page
+    .locator('[data-testid^="workspace-project-ownership-history-row-"]')
+    .filter({
+      has: page.locator(`a[href$="/projects/${e2eProjectSlug}"]`),
+    })
+    .first();
+  await expect(row).toBeVisible();
+  return row;
+}
+
 test.describe.serial("supabase workspace membership lifecycle", () => {
   test.skip(!isSupabaseE2EMode(), "This suite only runs when Supabase E2E mode is enabled.");
 
@@ -73,6 +108,11 @@ test.describe.serial("supabase workspace membership lifecycle", () => {
     page,
   }) => {
     const invitee = inviteeIdentity();
+    const baseline = await normalizeSupabaseWorkspaceMembershipBaseline({
+      ownerEmail,
+      workspaceSlug: e2eWorkspaceSlug,
+      projectSlug: e2eProjectSlug,
+    });
 
     await login(page, ownerEmail, ownerPassword);
     await page.goto(workspaceManagePath);
@@ -80,10 +120,11 @@ test.describe.serial("supabase workspace membership lifecycle", () => {
     await createInvitation(page, { email: invitee.email, role: "viewer" });
     await page.goto(workspaceManagePath);
 
-    const invitationRow = await firstInvitationRow(page);
-    await expect(invitationRow).toContainText(invitee.email);
-    await expect(invitationRow).toContainText(/Stored link|Link i ruajtur/i);
-    const inviteHref = await invitationRow.locator('[data-testid^="workspace-invitation-link-"]').getAttribute("href");
+    const createdInvitationRow = await invitationRow(page, invitee.email);
+    await expect(createdInvitationRow).toContainText(/Stored link|Link i ruajtur/i);
+    const inviteHref = await createdInvitationRow
+      .locator('[data-testid^="workspace-invitation-link-"]')
+      .getAttribute("href");
 
     if (!inviteHref) {
       throw new Error("The Supabase invitation row did not expose a link.");
@@ -101,58 +142,51 @@ test.describe.serial("supabase workspace membership lifecycle", () => {
 
     const inviteeMembershipId = inviteeMembershipTestId.replace("workspace-member-row-", "");
 
+    await expect(page.getByTestId("workspace-owner-transfer-target")).toBeEnabled();
     await page.getByTestId("workspace-owner-transfer-target").selectOption(inviteeMembershipId);
     await page.getByTestId("workspace-owner-transfer-confirmation").fill(e2eWorkspaceSlug);
     await page.getByTestId("workspace-owner-transfer-submit").click();
     await page.waitForLoadState("networkidle");
 
-    await expect(page.getByTestId("workspace-project-ownership-card")).toContainText(
-      /Different from workspace owner|Ndryshe nga workspace owner/i,
-    );
-    await expect(page.getByTestId("workspace-project-ownership-review-card")).toContainText(
-      /Needs review|Kërkon review/i,
-    );
-    const projectOwnershipRow = page.getByTestId(/workspace-project-ownership-review-row-/).first();
-    await projectOwnershipRow.getByTestId(/workspace-project-owner-target-/).selectOption(inviteeMembershipId);
-    await projectOwnershipRow.getByTestId(/workspace-project-owner-confirmation-/).fill(e2eProjectSlug);
-    await projectOwnershipRow.getByTestId(/workspace-project-owner-submit-/).click();
+    const targetProjectVisibilityRow = await projectOwnershipVisibilityRow(page, baseline.projectName);
+    await expect(targetProjectVisibilityRow).toContainText(/Different from workspace owner|Ndryshe nga workspace owner/i);
+
+    const targetProjectReviewRow = await projectOwnershipReviewRow(page);
+    await expect(targetProjectReviewRow).toContainText(/Needs review|Kërkon review/i);
+    await targetProjectReviewRow.getByTestId(/workspace-project-owner-target-/).selectOption(inviteeMembershipId);
+    await targetProjectReviewRow.getByTestId(/workspace-project-owner-confirmation-/).fill(e2eProjectSlug);
+    await targetProjectReviewRow.getByTestId(/workspace-project-owner-submit-/).click();
     await page.waitForLoadState("networkidle");
 
-    await expect(page.getByTestId("workspace-project-ownership-card")).toContainText(
+    await expect(await projectOwnershipVisibilityRow(page, baseline.projectName)).toContainText(
       /Matches workspace owner|Përputhet me workspace owner/i,
     );
-    await expect(page.getByTestId("workspace-project-ownership-review-card")).toContainText(
-      /Aligned|I përafruar/i,
-    );
+    await expect(await projectOwnershipReviewRow(page)).toContainText(/Aligned|I përafruar/i);
     await expect(page.getByTestId("workspace-project-ownership-history-card")).toContainText(
       /Current assignment|Reasignimi aktual/i,
     );
 
-    const latestHistoryRow = page.getByTestId(/workspace-project-ownership-history-row-/).first();
+    const latestHistoryRow = await projectOwnershipHistoryRow(page);
     await latestHistoryRow
       .getByTestId(/workspace-project-ownership-history-reassign-back-confirmation-/)
       .fill(e2eProjectSlug);
     await latestHistoryRow.getByTestId(/workspace-project-ownership-history-reassign-back-submit-/).click();
     await page.waitForLoadState("networkidle");
 
-    await expect(page.getByTestId("workspace-project-ownership-card")).toContainText(
+    await expect(await projectOwnershipVisibilityRow(page, baseline.projectName)).toContainText(
       /Different from workspace owner|Ndryshe nga workspace owner/i,
     );
-    await expect(page.getByTestId("workspace-project-ownership-review-card")).toContainText(
-      /Needs review|Kërkon review/i,
-    );
-    await expect(page.getByTestId("workspace-project-ownership-history-card")).toContainText(
+    await expect(await projectOwnershipReviewRow(page)).toContainText(/Needs review|Kërkon review/i);
+    await expect(await projectOwnershipHistoryRow(page)).toContainText(
       /Reassigned back|Kthyer mbrapa/i,
     );
 
     await inviteeSession.page.goto(workspaceManagePath);
     await expect(inviteeSession.page.getByTestId("workspace-owner-transfer-submit")).toBeEnabled();
-    await expect(inviteeSession.page.getByTestId("workspace-project-ownership-card")).toContainText(
+    await expect(await projectOwnershipVisibilityRow(inviteeSession.page, baseline.projectName)).toContainText(
       /Different from workspace owner|Ndryshe nga workspace owner/i,
     );
-    await expect(inviteeSession.page.getByTestId("workspace-project-ownership-review-card")).toContainText(
-      /Needs review|Kërkon review/i,
-    );
+    await expect(await projectOwnershipReviewRow(inviteeSession.page)).toContainText(/Needs review|Kërkon review/i);
 
     await page.goto(projectTimelinePath);
     const reassignmentEvent = page

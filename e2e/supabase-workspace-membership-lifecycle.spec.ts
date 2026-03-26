@@ -177,8 +177,11 @@ test.describe.serial("supabase workspace membership lifecycle", () => {
       /Different from workspace owner|Ndryshe nga workspace owner/i,
     );
     await expect(await projectOwnershipReviewRow(page)).toContainText(/Needs review|Kërkon review/i);
-    await expect(await projectOwnershipHistoryRow(page)).toContainText(
+    await expect(page.getByTestId("workspace-project-ownership-history-card")).toContainText(
       /Reassigned back|Kthyer mbrapa/i,
+    );
+    await expect(await projectOwnershipHistoryRow(page)).toContainText(
+      /Current assignment|Reasignimi aktual/i,
     );
 
     await inviteeSession.page.goto(workspaceManagePath);

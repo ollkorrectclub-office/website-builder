@@ -11,9 +11,9 @@ function inviteeIdentity() {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   return {
-    email: `phase52-${suffix}@besa-e2e.test`,
-    fullName: "Phase 52 Invitee",
-    password: "phase52-invitee-pass",
+    email: `phase54-${suffix}@besa-e2e.test`,
+    fullName: "Phase 54 Invitee",
+    password: "phase54-invitee-pass",
   };
 }
 
@@ -82,7 +82,7 @@ test.describe.serial("workspace membership lifecycle", () => {
     await resetE2EStore();
   });
 
-  test("supports reactivation, invite revoke/resend, invitation acceptance, owner transfer, and project-owner reassignment", async ({
+  test("supports reactivation, invite revoke/resend, invitation acceptance, owner transfer, and reversible project-owner reassignment", async ({
     browser,
     page,
   }) => {
@@ -170,14 +170,37 @@ test.describe.serial("workspace membership lifecycle", () => {
       /Aligned|I përafruar/i,
     );
     await expect(page.getByText(/reassigned .* to|reasign.* te/i).first()).toBeVisible();
+    const ownershipHistoryCard = page.getByTestId("workspace-project-ownership-history-card");
+    await expect(ownershipHistoryCard).toBeVisible();
+    await expect(ownershipHistoryCard).toContainText(invitee.fullName);
+    await expect(ownershipHistoryCard).toContainText(/Current assignment|Reasignimi aktual/i);
+
+    const latestHistoryRow = page.getByTestId(/workspace-project-ownership-history-row-/).first();
+    await expect(latestHistoryRow).toContainText(/Before|Para/i);
+    await expect(latestHistoryRow).toContainText(/After|Pas/i);
+    await latestHistoryRow
+      .getByTestId(/workspace-project-ownership-history-reassign-back-confirmation-/)
+      .fill(e2eProjectSlug);
+    await latestHistoryRow.getByTestId(/workspace-project-ownership-history-reassign-back-submit-/).click();
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByTestId("workspace-project-ownership-card")).toContainText(
+      /Different from workspace owner|Ndryshe nga workspace owner/i,
+    );
+    await expect(page.getByTestId("workspace-project-ownership-review-card")).toContainText(
+      /Needs review|Kërkon review/i,
+    );
+    await expect(page.getByTestId("workspace-project-ownership-history-card")).toContainText(
+      /Reassigned back|Kthyer mbrapa/i,
+    );
 
     await inviteeSession.page.goto(workspaceManagePath);
     await expect(inviteeSession.page.getByTestId("workspace-owner-transfer-submit")).toBeEnabled();
     await expect(inviteeSession.page.getByTestId("workspace-project-ownership-card")).toContainText(
-      /Matches workspace owner|Përputhet me workspace owner/i,
+      /Different from workspace owner|Ndryshe nga workspace owner/i,
     );
     await expect(inviteeSession.page.getByTestId("workspace-project-ownership-review-card")).toContainText(
-      /Aligned|I përafruar/i,
+      /Needs review|Kërkon review/i,
     );
 
     await page.goto(projectTimelinePath);
@@ -185,7 +208,7 @@ test.describe.serial("workspace membership lifecycle", () => {
       .locator('[data-testid="timeline-event-card"][data-event-kind="project_owner_reassigned"]')
       .first();
     await expect(reassignmentEvent).toBeVisible();
-    await expect(reassignmentEvent).toContainText(invitee.fullName);
+    await expect(reassignmentEvent).toContainText(/Arta|arta@besa\.studio/i);
     await reassignmentEvent.getByTestId("timeline-open-context").click();
     await page.waitForURL(`**/${e2eProjectSlug}/plan`);
 

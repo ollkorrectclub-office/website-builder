@@ -7,7 +7,7 @@ import { useFormStatus } from "react-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { projectBaseRoute } from "@/lib/builder/routes";
+import { projectBaseRoute, projectTimelineRoute } from "@/lib/builder/routes";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
 import type { Locale } from "@/lib/i18n/locales";
 import { initialFormState } from "@/lib/workspaces/form-state";
@@ -710,6 +710,253 @@ function ProjectOwnershipAlignmentCard({
   );
 }
 
+type ProjectOwnershipHistoryState = "current" | "reassigned_back" | "superseded";
+
+function projectOwnershipHistoryState(
+  event: WorkspaceMemberEventRecord,
+  currentOwnerUserId: string | null,
+): ProjectOwnershipHistoryState {
+  if (currentOwnerUserId && event.nextOwnerUserId && currentOwnerUserId === event.nextOwnerUserId) {
+    return "current";
+  }
+
+  if (currentOwnerUserId && event.previousOwnerUserId && currentOwnerUserId === event.previousOwnerUserId) {
+    return "reassigned_back";
+  }
+
+  return "superseded";
+}
+
+function projectOwnershipHistoryTone(state: ProjectOwnershipHistoryState) {
+  switch (state) {
+    case "current":
+      return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200";
+    case "reassigned_back":
+      return "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200";
+    case "superseded":
+      return "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200";
+  }
+}
+
+function projectOwnershipHistoryLabel(dictionary: Dictionary, state: ProjectOwnershipHistoryState) {
+  switch (state) {
+    case "current":
+      return dictionary.dashboard.members.projectOwnershipHistoryCurrentBadge;
+    case "reassigned_back":
+      return dictionary.dashboard.members.projectOwnershipHistoryReassignedBackBadge;
+    case "superseded":
+      return dictionary.dashboard.members.projectOwnershipHistorySupersededBadge;
+  }
+}
+
+function ProjectOwnershipHistoryRow({
+  locale,
+  dictionary,
+  workspaceSlug,
+  bundle,
+  event,
+  reassignProjectOwnerAction,
+}: {
+  locale: Locale;
+  dictionary: Dictionary;
+  workspaceSlug: string;
+  bundle: WorkspaceMemberManagementBundle;
+  event: WorkspaceMemberEventRecord;
+  reassignProjectOwnerAction: MemberAction;
+}) {
+  const [state, formAction] = useActionState(reassignProjectOwnerAction, initialFormState);
+  const linkedProject = event.projectId
+    ? (bundle.projectOwnerships.find((entry) => entry.projectId === event.projectId) ?? null)
+    : null;
+  const previousOwnerMember = event.previousOwnerUserId
+    ? (bundle.members.find((member) => member.userId === event.previousOwnerUserId) ?? null)
+    : null;
+  const currentState = projectOwnershipHistoryState(event, linkedProject?.projectOwnerUserId ?? null);
+  const canManage = bundle.permissions.canManageWorkspace;
+  const canReassignBack =
+    canManage &&
+    Boolean(linkedProject) &&
+    Boolean(previousOwnerMember) &&
+    previousOwnerMember?.status === "active" &&
+    currentState === "current";
+  const reassignBackLabel =
+    locale === "sq"
+      ? `Reasignoje prapa te ${previousOwnerMember?.fullName ?? dictionary.dashboard.members.projectOwnershipHistoryUnknownOwner}`
+      : `Reassign back to ${previousOwnerMember?.fullName ?? dictionary.dashboard.members.projectOwnershipHistoryUnknownOwner}`;
+  const reassigningBackLabel =
+    locale === "sq"
+      ? `Po kthehet te ${previousOwnerMember?.fullName ?? dictionary.dashboard.members.projectOwnershipHistoryUnknownOwner}...`
+      : `Reassigning back to ${previousOwnerMember?.fullName ?? dictionary.dashboard.members.projectOwnershipHistoryUnknownOwner}...`;
+
+  return (
+    <div
+      className="rounded-[18px] border border-border bg-card/70 px-4 py-4"
+      data-testid={`workspace-project-ownership-history-row-${event.id}`}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge>{linkedProject?.projectName ?? dictionary.dashboard.members.projectOwnershipHistoryUnknownProject}</Badge>
+        <Badge className={projectOwnershipHistoryTone(currentState)}>
+          {projectOwnershipHistoryLabel(dictionary, currentState)}
+        </Badge>
+      </div>
+
+      <p className="mt-3 text-sm font-semibold text-card-foreground">{event.summary}</p>
+      <p className="mt-2 text-xs text-muted-foreground">
+        {event.actorLabel} · {formatDateTimeLabel(event.occurredAt, locale)}
+      </p>
+
+      <dl className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-[16px] border border-border bg-background/60 px-3 py-3">
+          <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            {dictionary.dashboard.members.projectOwnershipHistoryBeforeLabel}
+          </dt>
+          <dd className="mt-2 text-sm font-semibold text-card-foreground">
+            {event.previousOwnerName ?? event.previousOwnerEmail ?? "—"}
+          </dd>
+        </div>
+        <div className="rounded-[16px] border border-border bg-background/60 px-3 py-3">
+          <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            {dictionary.dashboard.members.projectOwnershipHistoryAfterLabel}
+          </dt>
+          <dd className="mt-2 text-sm font-semibold text-card-foreground">
+            {event.nextOwnerName ?? event.nextOwnerEmail ?? event.memberName}
+          </dd>
+        </div>
+        <div className="rounded-[16px] border border-border bg-background/60 px-3 py-3">
+          <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            {dictionary.dashboard.members.projectOwnershipHistoryCurrentOwnerLabel}
+          </dt>
+          <dd className="mt-2 text-sm font-semibold text-card-foreground">
+            {linkedProject?.projectOwnerName ?? dictionary.dashboard.members.projectOwnershipHistoryUnknownOwner}
+          </dd>
+        </div>
+      </dl>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        {linkedProject ? (
+          <>
+            <Link
+              href={projectBaseRoute(locale, workspaceSlug, linkedProject.projectSlug)}
+              className="text-sm font-semibold text-primary transition hover:text-primary/80"
+              data-testid={`workspace-project-ownership-history-review-link-${event.id}`}
+            >
+              {dictionary.dashboard.members.projectOwnershipReviewAction}
+            </Link>
+            <Link
+              href={projectTimelineRoute(locale, workspaceSlug, linkedProject.projectSlug)}
+              className="text-sm font-semibold text-primary transition hover:text-primary/80"
+              data-testid={`workspace-project-ownership-history-timeline-link-${event.id}`}
+            >
+              {dictionary.dashboard.members.projectOwnershipHistoryTimelineAction}
+            </Link>
+          </>
+        ) : null}
+      </div>
+
+      <p className="mt-3 text-xs text-muted-foreground">
+        {dictionary.dashboard.members.projectOwnershipHistoryCurrentStatePrefix}{" "}
+        {projectOwnershipHistoryLabel(dictionary, currentState).toLowerCase()}.
+      </p>
+
+      {linkedProject ? (
+        <form
+          action={formAction}
+          className="mt-4 space-y-3"
+          data-testid={`workspace-project-ownership-history-reassign-back-form-${event.id}`}
+        >
+          <input type="hidden" name="projectId" value={linkedProject.projectId} />
+          <input type="hidden" name="targetMembershipId" value={previousOwnerMember?.membershipId ?? ""} />
+          <label className="block space-y-2 text-sm">
+            <span className="text-muted-foreground">
+              {dictionary.dashboard.members.projectOwnershipReassignConfirmationLabel}
+            </span>
+            <input
+              name="confirmation"
+              placeholder={linkedProject.projectSlug}
+              className={fieldClass()}
+              disabled={!canReassignBack}
+              data-testid={`workspace-project-ownership-history-reassign-back-confirmation-${event.id}`}
+            />
+            <p className="text-xs text-muted-foreground">
+              {dictionary.dashboard.members.projectOwnershipHistoryReassignBackHint}
+            </p>
+          </label>
+          <div className="flex flex-wrap items-center gap-3">
+            <MemberActionButton
+              label={reassignBackLabel}
+              pendingLabel={reassigningBackLabel}
+              disabled={!canReassignBack}
+              testId={`workspace-project-ownership-history-reassign-back-submit-${event.id}`}
+            />
+          </div>
+          {state.message ? (
+            <p
+              className={`text-xs ${state.status === "error" ? "text-red-600 dark:text-red-300" : "text-emerald-700 dark:text-emerald-300"}`}
+            >
+              {state.message}
+            </p>
+          ) : null}
+          {!canReassignBack ? (
+            <p className="text-xs text-muted-foreground">
+              {previousOwnerMember?.status === "deactivated"
+                ? dictionary.dashboard.members.projectOwnershipHistoryReassignBackUnavailable
+                : dictionary.dashboard.members.projectOwnershipHistoryReassignBackDisabled}
+            </p>
+          ) : null}
+        </form>
+      ) : null}
+    </div>
+  );
+}
+
+function ProjectOwnershipHistoryCard({
+  locale,
+  dictionary,
+  bundle,
+  reassignProjectOwnerAction,
+}: {
+  locale: Locale;
+  dictionary: Dictionary;
+  bundle: WorkspaceMemberManagementBundle;
+  reassignProjectOwnerAction: MemberAction;
+}) {
+  const historyEvents = bundle.events.filter((event) => event.eventType === "project_owner_reassigned");
+
+  return (
+    <Card
+      className="border-border bg-background/70 px-5 py-5 shadow-none"
+      data-testid="workspace-project-ownership-history-card"
+    >
+      <p className="text-sm font-semibold text-card-foreground">
+        {dictionary.dashboard.members.projectOwnershipHistoryTitle}
+      </p>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+        {dictionary.dashboard.members.projectOwnershipHistoryCopy}
+      </p>
+
+      <div className="mt-4 space-y-3">
+        {historyEvents.length > 0 ? (
+          historyEvents.map((event) => (
+            <ProjectOwnershipHistoryRow
+              key={event.id}
+              locale={locale}
+              dictionary={dictionary}
+              workspaceSlug={bundle.workspace.slug}
+              bundle={bundle}
+              event={event}
+              reassignProjectOwnerAction={reassignProjectOwnerAction}
+            />
+          ))
+        ) : (
+          <p className="text-sm leading-6 text-muted-foreground">
+            {dictionary.dashboard.members.projectOwnershipHistoryEmpty}
+          </p>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function OwnerTransferCard({
   locale,
   dictionary,
@@ -946,6 +1193,12 @@ export function WorkspaceMembersCard({
 
             <ProjectOwnershipVisibilityCard locale={locale} dictionary={dictionary} bundle={bundle} />
             <ProjectOwnershipAlignmentCard
+              locale={locale}
+              dictionary={dictionary}
+              bundle={bundle}
+              reassignProjectOwnerAction={reassignProjectOwnerAction}
+            />
+            <ProjectOwnershipHistoryCard
               locale={locale}
               dictionary={dictionary}
               bundle={bundle}

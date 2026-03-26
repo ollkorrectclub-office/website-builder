@@ -11,9 +11,9 @@ function inviteeIdentity() {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   return {
-    email: `phase52-supabase-${suffix}@besa-e2e.test`,
-    fullName: "Phase 52 Supabase Invitee",
-    password: "phase52-supabase-pass",
+    email: `phase54-supabase-${suffix}@besa-e2e.test`,
+    fullName: "Phase 54 Supabase Invitee",
+    password: "phase54-supabase-pass",
   };
 }
 
@@ -68,7 +68,7 @@ async function acceptInvitation(
 test.describe.serial("supabase workspace membership lifecycle", () => {
   test.skip(!isSupabaseE2EMode(), "This suite only runs when Supabase E2E mode is enabled.");
 
-  test("accepts an invitation, transfers workspace ownership, and reassigns project ownership with visible audit history", async ({
+  test("accepts an invitation, transfers workspace ownership, and supports reversible project-owner reassignment with visible audit history", async ({
     browser,
     page,
   }) => {
@@ -124,14 +124,34 @@ test.describe.serial("supabase workspace membership lifecycle", () => {
     await expect(page.getByTestId("workspace-project-ownership-review-card")).toContainText(
       /Aligned|I përafruar/i,
     );
+    await expect(page.getByTestId("workspace-project-ownership-history-card")).toContainText(
+      /Current assignment|Reasignimi aktual/i,
+    );
+
+    const latestHistoryRow = page.getByTestId(/workspace-project-ownership-history-row-/).first();
+    await latestHistoryRow
+      .getByTestId(/workspace-project-ownership-history-reassign-back-confirmation-/)
+      .fill(e2eProjectSlug);
+    await latestHistoryRow.getByTestId(/workspace-project-ownership-history-reassign-back-submit-/).click();
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByTestId("workspace-project-ownership-card")).toContainText(
+      /Different from workspace owner|Ndryshe nga workspace owner/i,
+    );
+    await expect(page.getByTestId("workspace-project-ownership-review-card")).toContainText(
+      /Needs review|Kërkon review/i,
+    );
+    await expect(page.getByTestId("workspace-project-ownership-history-card")).toContainText(
+      /Reassigned back|Kthyer mbrapa/i,
+    );
 
     await inviteeSession.page.goto(workspaceManagePath);
     await expect(inviteeSession.page.getByTestId("workspace-owner-transfer-submit")).toBeEnabled();
     await expect(inviteeSession.page.getByTestId("workspace-project-ownership-card")).toContainText(
-      /Matches workspace owner|Përputhet me workspace owner/i,
+      /Different from workspace owner|Ndryshe nga workspace owner/i,
     );
     await expect(inviteeSession.page.getByTestId("workspace-project-ownership-review-card")).toContainText(
-      /Aligned|I përafruar/i,
+      /Needs review|Kërkon review/i,
     );
 
     await page.goto(projectTimelinePath);
@@ -139,7 +159,7 @@ test.describe.serial("supabase workspace membership lifecycle", () => {
       .locator('[data-testid="timeline-event-card"][data-event-kind="project_owner_reassigned"]')
       .first();
     await expect(reassignmentEvent).toBeVisible();
-    await expect(reassignmentEvent).toContainText(invitee.fullName);
+    await expect(reassignmentEvent).toContainText(new RegExp(ownerEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
     await reassignmentEvent.getByTestId("timeline-open-context").click();
     await page.waitForURL(`**/${e2eProjectSlug}/plan`);
 

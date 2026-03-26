@@ -137,6 +137,12 @@ export interface WorkspaceMemberEventRecord {
   memberName: string;
   previousRole: WorkspaceRole | null;
   nextRole: WorkspaceRole;
+  previousOwnerUserId: string | null;
+  previousOwnerName: string | null;
+  previousOwnerEmail: string | null;
+  nextOwnerUserId: string | null;
+  nextOwnerName: string | null;
+  nextOwnerEmail: string | null;
   summary: string;
   occurredAt: string;
 }

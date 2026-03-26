@@ -277,6 +277,27 @@ export const dictionaries = {
           "Për siguri, shkruaj slug-un e projektit para reasignimit manual të owner-it.",
         projectOwnershipReassignAction: "Reasigno owner-in",
         projectOwnershipReassigningAction: "Po reasignohet owner-i...",
+        projectOwnershipHistoryTitle: "Historia e reasignimeve të owner-it",
+        projectOwnershipHistoryCopy:
+          "Çdo reasignim ruan para/pas, owner-in aktual dhe një flow të veçantë për ta kthyer manualisht mbrapa me konfirmim. Nuk ka undo automatik ose të heshtur.",
+        projectOwnershipHistoryEmpty:
+          "Nuk ka ende reasignime të ruajtura të project owner-it për këtë workspace.",
+        projectOwnershipHistoryBeforeLabel: "Para",
+        projectOwnershipHistoryAfterLabel: "Pas",
+        projectOwnershipHistoryCurrentOwnerLabel: "Owner-i aktual",
+        projectOwnershipHistoryUnknownProject: "Projekt i lidhur",
+        projectOwnershipHistoryUnknownOwner: "Owner i panjohur",
+        projectOwnershipHistoryTimelineAction: "Hap timeline-n e projektit",
+        projectOwnershipHistoryCurrentStatePrefix: "Gjendja aktuale",
+        projectOwnershipHistoryCurrentBadge: "Reasignimi aktual",
+        projectOwnershipHistoryReassignedBackBadge: "Kthyer mbrapa",
+        projectOwnershipHistorySupersededBadge: "I zëvendësuar",
+        projectOwnershipHistoryReassignBackHint:
+          "Ky veprim krijon reasignim të ri në histori. Shkruaj slug-un e projektit për ta kthyer ownership-in te owner-i i mëparshëm.",
+        projectOwnershipHistoryReassignBackDisabled:
+          "Reasignimi mbrapa shfaqet vetëm kur ky event përfaqëson ende assignment-in aktual të projektit.",
+        projectOwnershipHistoryReassignBackUnavailable:
+          "Owner-i i mëparshëm nuk është aktiv më, ndaj reasignimi mbrapa nuk është i disponueshëm nga kjo hyrje historie.",
         currentUserBadge: "Ti",
         joinedAt: "U bashkua",
         activityTitle: "Aktiviteti i roleve",
@@ -1920,6 +1941,27 @@ export const dictionaries = {
           "For safety, enter the project slug before manually reassigning ownership.",
         projectOwnershipReassignAction: "Reassign owner",
         projectOwnershipReassigningAction: "Reassigning owner...",
+        projectOwnershipHistoryTitle: "Project-owner reassignment history",
+        projectOwnershipHistoryCopy:
+          "Each reassignment keeps a clear before/after summary, the current owner, and a separate confirmed path to reassign back. There is no silent or automatic undo.",
+        projectOwnershipHistoryEmpty:
+          "No project-owner reassignments have been saved for this workspace yet.",
+        projectOwnershipHistoryBeforeLabel: "Before",
+        projectOwnershipHistoryAfterLabel: "After",
+        projectOwnershipHistoryCurrentOwnerLabel: "Current owner",
+        projectOwnershipHistoryUnknownProject: "Linked project",
+        projectOwnershipHistoryUnknownOwner: "Unknown owner",
+        projectOwnershipHistoryTimelineAction: "Open project timeline",
+        projectOwnershipHistoryCurrentStatePrefix: "Current state",
+        projectOwnershipHistoryCurrentBadge: "Current assignment",
+        projectOwnershipHistoryReassignedBackBadge: "Reassigned back",
+        projectOwnershipHistorySupersededBadge: "Superseded",
+        projectOwnershipHistoryReassignBackHint:
+          "This creates a new reassignment event in history. Enter the project slug to move ownership back to the previous owner.",
+        projectOwnershipHistoryReassignBackDisabled:
+          "Reassign back is shown only while this entry still represents the project's current assignment.",
+        projectOwnershipHistoryReassignBackUnavailable:
+          "The previous owner is no longer active, so a reassignment back is not available from this history entry.",
         currentUserBadge: "You",
         joinedAt: "Joined",
         activityTitle: "Role activity",

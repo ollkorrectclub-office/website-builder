@@ -522,6 +522,42 @@ function normalizeLocalStore(store: Partial<LocalStoreShape>) {
               : typeof event.next_role === "string"
                 ? event.next_role
                 : "viewer") as WorkspaceMemberEventRecord["nextRole"],
+          previousOwnerUserId:
+            typeof event.previousOwnerUserId === "string"
+              ? event.previousOwnerUserId
+              : typeof event.previous_owner_user_id === "string"
+                ? event.previous_owner_user_id
+                : null,
+          previousOwnerName:
+            typeof event.previousOwnerName === "string"
+              ? event.previousOwnerName
+              : typeof event.previous_owner_name === "string"
+                ? event.previous_owner_name
+                : null,
+          previousOwnerEmail:
+            typeof event.previousOwnerEmail === "string"
+              ? event.previousOwnerEmail
+              : typeof event.previous_owner_email === "string"
+                ? event.previous_owner_email
+                : null,
+          nextOwnerUserId:
+            typeof event.nextOwnerUserId === "string"
+              ? event.nextOwnerUserId
+              : typeof event.next_owner_user_id === "string"
+                ? event.next_owner_user_id
+                : null,
+          nextOwnerName:
+            typeof event.nextOwnerName === "string"
+              ? event.nextOwnerName
+              : typeof event.next_owner_name === "string"
+                ? event.next_owner_name
+                : null,
+          nextOwnerEmail:
+            typeof event.nextOwnerEmail === "string"
+              ? event.nextOwnerEmail
+              : typeof event.next_owner_email === "string"
+                ? event.next_owner_email
+                : null,
           summary: String(event.summary ?? ""),
           occurredAt:
             typeof event.occurredAt === "string"

@@ -315,6 +315,12 @@ async function appendWorkspaceLifecycleEvent(input: {
   memberName: string;
   previousRole: WorkspaceRole | null;
   nextRole: WorkspaceRole;
+  previousOwnerUserId?: string | null;
+  previousOwnerName?: string | null;
+  previousOwnerEmail?: string | null;
+  nextOwnerUserId?: string | null;
+  nextOwnerName?: string | null;
+  nextOwnerEmail?: string | null;
   summary: string;
   occurredAt?: string;
 }) {
@@ -332,6 +338,12 @@ async function appendWorkspaceLifecycleEvent(input: {
     memberName: input.memberName,
     previousRole: input.previousRole,
     nextRole: input.nextRole,
+    previousOwnerUserId: input.previousOwnerUserId ?? null,
+    previousOwnerName: input.previousOwnerName ?? null,
+    previousOwnerEmail: input.previousOwnerEmail ?? null,
+    nextOwnerUserId: input.nextOwnerUserId ?? null,
+    nextOwnerName: input.nextOwnerName ?? null,
+    nextOwnerEmail: input.nextOwnerEmail ?? null,
     summary: input.summary,
     occurredAt: input.occurredAt ?? new Date().toISOString(),
   });
@@ -1461,6 +1473,12 @@ export async function reassignProjectOwnerAction(
       memberName: targetMember.fullName,
       previousRole: projectOwnership.projectOwnerWorkspaceRole,
       nextRole: targetMember.role,
+      previousOwnerUserId: projectOwnership.projectOwnerUserId,
+      previousOwnerName: projectOwnership.projectOwnerName,
+      previousOwnerEmail: projectOwnership.projectOwnerEmail,
+      nextOwnerUserId: targetMember.userId,
+      nextOwnerName: targetMember.fullName,
+      nextOwnerEmail: targetMember.email,
       summary: workspaceEventSummary,
     });
 

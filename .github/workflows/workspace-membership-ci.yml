@@ -34,7 +34,9 @@ jobs:
         run: npm run build
 
       - name: Run required local fallback workspace membership suite
-        run: npm run test:e2e:workspace-membership
+        run: |
+          npm run test:e2e:workspace-membership
+          exit 1
 
       - name: Upload Playwright report artifact
         if: always()

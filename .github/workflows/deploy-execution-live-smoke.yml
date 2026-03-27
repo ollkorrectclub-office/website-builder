@@ -21,10 +21,10 @@ jobs:
       BESA_E2E_LIVE_DEPLOY_API_BASE_URL: ${{ secrets.BESA_E2E_LIVE_DEPLOY_API_BASE_URL }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -40,7 +40,7 @@ jobs:
 
       - name: Upload Playwright report artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         id: upload_live_smoke_report
         with:
           name: deploy-execution-live-smoke-playwright-report
@@ -49,7 +49,7 @@ jobs:
 
       - name: Upload test-results artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         id: upload_live_smoke_results
         with:
           name: deploy-execution-live-smoke-test-results
@@ -58,7 +58,7 @@ jobs:
 
       - name: Upload wrapper and server logs artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         id: upload_live_smoke_logs
         with:
           name: deploy-execution-live-smoke-wrapper-logs

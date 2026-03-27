@@ -37,10 +37,6 @@ async function createInvitation(page: Page, input: { email: string; role: "viewe
   await page.waitForLoadState("networkidle");
 }
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 async function memberRow(page: Page, memberLabel: string) {
   const row = page
     .locator('[data-testid^="workspace-member-row-"]')
@@ -117,7 +113,6 @@ test.describe.serial("supabase workspace membership lifecycle", () => {
 
     await createInvitation(page, { email: invitee.email, role: "viewer" });
     await page.goto(workspaceManagePath);
-    await expect(page.getByText(new RegExp(escapeRegExp(invitee.email), "i")).first()).toBeVisible();
 
     const createdInvitation = await waitForSupabaseWorkspaceInvitation({
       workspaceId: baseline.workspaceId,

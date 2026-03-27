@@ -33,13 +33,16 @@ async function createInvitation(page: Page, input: { email: string; role: "viewe
   await page.waitForLoadState("networkidle");
 }
 
-async function firstInvitationRow(page: Page) {
-  const row = page.locator('[data-testid^="workspace-invitation-row-"]').first();
+async function invitationRow(page: Page, email: string) {
+  const row = page
+    .locator('[data-testid^="workspace-invitation-row-"]')
+    .filter({ hasText: email })
+    .first();
   await expect(row).toBeVisible();
   return row;
 }
 
-async function getInvitationHref(row: Awaited<ReturnType<typeof firstInvitationRow>>) {
+async function getInvitationHref(row: Awaited<ReturnType<typeof invitationRow>>) {
   const href = await row.locator('[data-testid^="workspace-invitation-link-"]').getAttribute("href");
 
   if (!href) {
@@ -105,7 +108,7 @@ test.describe.serial("workspace membership lifecycle", () => {
     await createInvitation(page, { email: invitee.email, role: "viewer" });
     await page.goto(workspaceManagePath);
 
-    const initialInvitationRow = await firstInvitationRow(page);
+    const initialInvitationRow = await invitationRow(page, invitee.email);
     await expect(initialInvitationRow).toContainText(invitee.email);
     await expect(initialInvitationRow).toContainText(/Stored link|Link i ruajtur/i);
     await expect(initialInvitationRow).toContainText(/Attempt: #1|Tentativa: #1/i);
@@ -113,13 +116,13 @@ test.describe.serial("workspace membership lifecycle", () => {
     await page.waitForLoadState("networkidle");
     await page.goto(workspaceManagePath);
 
-    const revokedInvitationRow = await firstInvitationRow(page);
+    const revokedInvitationRow = await invitationRow(page, invitee.email);
     await expect(revokedInvitationRow).toContainText(/Revoked/i);
     await revokedInvitationRow.locator('[data-testid^="workspace-invitation-resend-"]').click();
     await page.waitForLoadState("networkidle");
     await page.goto(workspaceManagePath);
 
-    const resentInvitationRow = await firstInvitationRow(page);
+    const resentInvitationRow = await invitationRow(page, invitee.email);
     await expect(resentInvitationRow).toContainText(invitee.email);
     await expect(resentInvitationRow).toContainText(/Pending/i);
     await expect(resentInvitationRow).toContainText(/Attempt: #2|Tentativa: #2/i);
@@ -226,13 +229,13 @@ test.describe.serial("workspace membership lifecycle", () => {
     await createInvitation(page, { email: invitee.email, role: "viewer" });
     await page.goto(workspaceManagePath);
 
-    const invitationRow = await firstInvitationRow(page);
-    const inviteHref = await getInvitationHref(invitationRow);
+    const pendingInvitationRow = await invitationRow(page, invitee.email);
+    const inviteHref = await getInvitationHref(pendingInvitationRow);
 
     await expireWorkspaceInvitationInLocalStore(invitee.email);
 
     await page.goto(workspaceManagePath);
-    const expiredInvitationRow = await firstInvitationRow(page);
+    const expiredInvitationRow = await invitationRow(page, invitee.email);
     await expect(expiredInvitationRow).toContainText(/Expired|Skaduar/i);
     await expect(expiredInvitationRow.getByTestId(/workspace-invitation-expired-/)).toContainText(
       /must be resent|duhet ridërguar/i,

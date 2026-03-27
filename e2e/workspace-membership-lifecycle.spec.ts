@@ -33,6 +33,15 @@ async function createInvitation(page: Page, input: { email: string; role: "viewe
   await page.waitForLoadState("networkidle");
 }
 
+function freshPath(pathname: string) {
+  const nonce = `e2e=${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return pathname.includes("?") ? `${pathname}&${nonce}` : `${pathname}?${nonce}`;
+}
+
+async function gotoFresh(page: Page, pathname: string) {
+  await page.goto(freshPath(pathname));
+}
+
 async function invitationRow(page: Page, email: string) {
   const row = page
     .locator('[data-testid^="workspace-invitation-row-"]')
@@ -92,21 +101,21 @@ test.describe.serial("workspace membership lifecycle", () => {
     const invitee = inviteeIdentity();
 
     await login(page, localOwner.email, localOwner.password);
-    await page.goto(workspaceManagePath);
+    await gotoFresh(page, workspaceManagePath);
 
     const editorRow = await memberRow(page, "Leon Gashi");
     await editorRow.locator('[data-testid^="workspace-member-deactivate-"]').click();
     await page.waitForLoadState("networkidle");
-    await page.goto(workspaceManagePath);
+    await gotoFresh(page, workspaceManagePath);
     await expect(await memberRow(page, "Leon Gashi")).toContainText(/Deactivated/i);
 
     await (await memberRow(page, "Leon Gashi")).locator('[data-testid^="workspace-member-reactivate-"]').click();
     await page.waitForLoadState("networkidle");
-    await page.goto(workspaceManagePath);
+    await gotoFresh(page, workspaceManagePath);
     await expect(await memberRow(page, "Leon Gashi")).toContainText(/Active/i);
 
     await createInvitation(page, { email: invitee.email, role: "viewer" });
-    await page.goto(workspaceManagePath);
+    await gotoFresh(page, workspaceManagePath);
 
     const initialInvitationRow = await invitationRow(page, invitee.email);
     await expect(initialInvitationRow).toContainText(invitee.email);
@@ -114,13 +123,13 @@ test.describe.serial("workspace membership lifecycle", () => {
     await expect(initialInvitationRow).toContainText(/Attempt: #1|Tentativa: #1/i);
     await initialInvitationRow.locator('[data-testid^="workspace-invitation-revoke-"]').click();
     await page.waitForLoadState("networkidle");
-    await page.goto(workspaceManagePath);
+    await gotoFresh(page, workspaceManagePath);
 
     const revokedInvitationRow = await invitationRow(page, invitee.email);
     await expect(revokedInvitationRow).toContainText(/Revoked/i);
     await revokedInvitationRow.locator('[data-testid^="workspace-invitation-resend-"]').click();
     await page.waitForLoadState("networkidle");
-    await page.goto(workspaceManagePath);
+    await gotoFresh(page, workspaceManagePath);
 
     const resentInvitationRow = await invitationRow(page, invitee.email);
     await expect(resentInvitationRow).toContainText(invitee.email);
@@ -197,7 +206,7 @@ test.describe.serial("workspace membership lifecycle", () => {
       /Reassigned back|Kthyer mbrapa/i,
     );
 
-    await inviteeSession.page.goto(workspaceManagePath);
+    await gotoFresh(inviteeSession.page, workspaceManagePath);
     await expect(inviteeSession.page.getByTestId("workspace-owner-transfer-submit")).toBeEnabled();
     await expect(inviteeSession.page.getByTestId("workspace-project-ownership-card")).toContainText(
       /Different from workspace owner|Ndryshe nga workspace owner/i,
@@ -206,7 +215,7 @@ test.describe.serial("workspace membership lifecycle", () => {
       /Needs review|Kërkon review/i,
     );
 
-    await page.goto(projectTimelinePath);
+    await gotoFresh(page, projectTimelinePath);
     const reassignmentEvent = page
       .locator('[data-testid="timeline-event-card"][data-event-kind="project_owner_reassigned"]')
       .first();
@@ -224,17 +233,17 @@ test.describe.serial("workspace membership lifecycle", () => {
     const invitee = inviteeIdentity();
 
     await login(page, localOwner.email, localOwner.password);
-    await page.goto(workspaceManagePath);
+    await gotoFresh(page, workspaceManagePath);
 
     await createInvitation(page, { email: invitee.email, role: "viewer" });
-    await page.goto(workspaceManagePath);
+    await gotoFresh(page, workspaceManagePath);
 
     const pendingInvitationRow = await invitationRow(page, invitee.email);
     const inviteHref = await getInvitationHref(pendingInvitationRow);
 
     await expireWorkspaceInvitationInLocalStore(invitee.email);
 
-    await page.goto(workspaceManagePath);
+    await gotoFresh(page, workspaceManagePath);
     const expiredInvitationRow = await invitationRow(page, invitee.email);
     await expect(expiredInvitationRow).toContainText(/Expired|Skaduar/i);
     await expect(expiredInvitationRow.getByTestId(/workspace-invitation-expired-/)).toContainText(

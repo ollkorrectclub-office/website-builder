@@ -7,7 +7,7 @@ on:
 
 jobs:
   deploy-execution-secret-gates:
-    name: Resolve deploy execution secret gates
+    name: Resolve optional deploy execution jobs
     runs-on: ubuntu-latest
     outputs:
       live_smoke_enabled: ${{ steps.resolve.outputs.live_smoke_enabled }}
@@ -22,19 +22,21 @@ jobs:
       BESA_E2E_SUPABASE_WORKSPACE_SLUG: ${{ secrets.BESA_E2E_SUPABASE_WORKSPACE_SLUG }}
       BESA_E2E_SUPABASE_PROJECT_SLUG: ${{ secrets.BESA_E2E_SUPABASE_PROJECT_SLUG }}
     steps:
-      - name: Resolve secret-gated deploy jobs
+      - name: Resolve optional deploy execution jobs
         id: resolve
         shell: bash
         run: |
           live_smoke_enabled=false
           supabase_parity_enabled=false
 
-          if [[ -n "${VERCEL_TOKEN}" && -n "${BESA_E2E_LIVE_DEPLOY_PROJECT_NAME}" ]]; then
-            live_smoke_enabled=true
-          fi
+          if [[ "${GITHUB_EVENT_NAME}" != "pull_request" ]]; then
+            if [[ -n "${VERCEL_TOKEN}" && -n "${BESA_E2E_LIVE_DEPLOY_PROJECT_NAME}" ]]; then
+              live_smoke_enabled=true
+            fi
 
-          if [[ -n "${NEXT_PUBLIC_SUPABASE_URL}" && -n "${SUPABASE_SERVICE_ROLE_KEY}" && -n "${BESA_E2E_SUPABASE_OWNER_EMAIL}" && -n "${BESA_E2E_SUPABASE_OWNER_PASSWORD}" && -n "${BESA_E2E_SUPABASE_WORKSPACE_SLUG}" && -n "${BESA_E2E_SUPABASE_PROJECT_SLUG}" ]]; then
-            supabase_parity_enabled=true
+            if [[ -n "${NEXT_PUBLIC_SUPABASE_URL}" && -n "${SUPABASE_SERVICE_ROLE_KEY}" && -n "${BESA_E2E_SUPABASE_OWNER_EMAIL}" && -n "${BESA_E2E_SUPABASE_OWNER_PASSWORD}" && -n "${BESA_E2E_SUPABASE_WORKSPACE_SLUG}" && -n "${BESA_E2E_SUPABASE_PROJECT_SLUG}" ]]; then
+              supabase_parity_enabled=true
+            fi
           fi
 
           echo "live_smoke_enabled=${live_smoke_enabled}" >> "${GITHUB_OUTPUT}"
@@ -112,7 +114,7 @@ jobs:
         run: node scripts/write-deploy-e2e-summary.mjs
 
   deploy-execution-live-smoke:
-    name: Deploy execution (live smoke)
+    name: Deploy execution optional live smoke
     needs:
       - deploy-execution-local-stub
       - deploy-execution-secret-gates
@@ -179,7 +181,7 @@ jobs:
       - name: Write deploy execution job summary
         if: always()
         env:
-          BESA_CI_JOB_LABEL: Deploy execution (live smoke)
+          BESA_CI_JOB_LABEL: Deploy execution optional live smoke
           BESA_CI_JOB_STATUS: ${{ job.status }}
           BESA_CI_SECRET_GATED: "1"
           BESA_CI_VERIFICATION_COMMAND: npm run verify:deploy-execution:live-smoke
@@ -195,7 +197,7 @@ jobs:
         run: node scripts/write-deploy-e2e-summary.mjs
 
   deploy-execution-supabase-parity:
-    name: Deploy execution (Supabase parity)
+    name: Deploy execution optional Supabase parity
     needs:
       - deploy-execution-local-stub
       - deploy-execution-secret-gates
@@ -261,7 +263,7 @@ jobs:
       - name: Write deploy execution job summary
         if: always()
         env:
-          BESA_CI_JOB_LABEL: Deploy execution (Supabase parity)
+          BESA_CI_JOB_LABEL: Deploy execution optional Supabase parity
           BESA_CI_JOB_STATUS: ${{ job.status }}
           BESA_CI_SECRET_GATED: "1"
           BESA_CI_VERIFICATION_COMMAND: npm run verify:deploy-execution:supabase

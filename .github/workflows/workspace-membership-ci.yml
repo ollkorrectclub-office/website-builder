@@ -1,0 +1,82 @@
+name: Workspace Membership CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  workspace-membership-local-fallback:
+    name: Workspace membership (local fallback)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run build
+        run: npm run build
+
+      - name: Run local fallback workspace membership suite
+        run: npm run test:e2e:workspace-membership
+
+      - name: Upload Playwright report artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        id: upload_membership_report
+        with:
+          name: workspace-membership-local-fallback-playwright-report
+          if-no-files-found: ignore
+          path: .artifacts/workspace-membership-local/playwright-report
+
+      - name: Upload test-results artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        id: upload_membership_results
+        with:
+          name: workspace-membership-local-fallback-test-results
+          if-no-files-found: ignore
+          path: .artifacts/workspace-membership-local/test-results
+
+      - name: Upload wrapper and server logs artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        id: upload_membership_logs
+        with:
+          name: workspace-membership-local-fallback-wrapper-logs
+          if-no-files-found: ignore
+          path: .artifacts/workspace-membership-local/logs
+
+      - name: Write workspace membership local fallback job summary
+        if: always()
+        env:
+          BESA_CI_JOB_LABEL: Workspace membership (local fallback)
+          BESA_CI_JOB_STATUS: ${{ job.status }}
+          BESA_CI_VERIFICATION_COMMAND: npm run lint && npm run build && npm run test:e2e:workspace-membership
+          BESA_CI_REPORT_ARTIFACT_NAME: workspace-membership-local-fallback-playwright-report
+          BESA_CI_REPORT_ARTIFACT_URL: ${{ steps.upload_membership_report.outputs.artifact-url }}
+          BESA_CI_TEST_RESULTS_ARTIFACT_NAME: workspace-membership-local-fallback-test-results
+          BESA_CI_TEST_RESULTS_ARTIFACT_URL: ${{ steps.upload_membership_results.outputs.artifact-url }}
+          BESA_CI_LOG_ARTIFACT_NAME: workspace-membership-local-fallback-wrapper-logs
+          BESA_CI_LOG_ARTIFACT_URL: ${{ steps.upload_membership_logs.outputs.artifact-url }}
+          BESA_CI_REPORT_PATH: .artifacts/workspace-membership-local/playwright-report
+          BESA_CI_TEST_RESULTS_PATH: .artifacts/workspace-membership-local/test-results
+          BESA_CI_LOG_PATH: .artifacts/workspace-membership-local/logs
+          BESA_CI_JSON_REPORT_PATH: .artifacts/workspace-membership-local/test-results/playwright-results.json
+        run: node scripts/write-workspace-membership-proof-summary.mjs

@@ -1,4 +1,4 @@
-name: Workspace Membership CI
+name: Workspace Membership Required CI
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 
 jobs:
   workspace-membership-local-fallback:
-    name: Workspace membership (local fallback)
+    name: Workspace membership required check (local fallback)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -33,7 +33,7 @@ jobs:
       - name: Run build
         run: npm run build
 
-      - name: Run local fallback workspace membership suite
+      - name: Run required local fallback workspace membership suite
         run: npm run test:e2e:workspace-membership
 
       - name: Upload Playwright report artifact
@@ -63,10 +63,11 @@ jobs:
           if-no-files-found: ignore
           path: .artifacts/workspace-membership-local/logs
 
-      - name: Write workspace membership local fallback job summary
+      - name: Write required workspace membership job summary
         if: always()
         env:
-          BESA_CI_JOB_LABEL: Workspace membership (local fallback)
+          BESA_CI_JOB_LABEL: Workspace membership required check (local fallback)
+          BESA_CI_JOB_VARIANT: required-local-fallback
           BESA_CI_JOB_STATUS: ${{ job.status }}
           BESA_CI_VERIFICATION_COMMAND: npm run lint && npm run build && npm run test:e2e:workspace-membership
           BESA_CI_REPORT_ARTIFACT_NAME: workspace-membership-local-fallback-playwright-report

@@ -16,6 +16,19 @@ function formatLink(label, url) {
   return `[${label}](${url})`;
 }
 
+function statusLabel(status) {
+  switch (status) {
+    case "success":
+      return "PASSED";
+    case "failure":
+      return "FAILED";
+    case "cancelled":
+      return "CANCELLED";
+    default:
+      return status.toUpperCase();
+  }
+}
+
 function fallbackCounts() {
   return {
     passed: 0,
@@ -109,6 +122,7 @@ if (!summaryPath) {
 }
 
 const jobLabel = value("BESA_CI_JOB_LABEL") || "Workspace membership proof";
+const jobVariant = value("BESA_CI_JOB_VARIANT");
 const verificationCommand = value("BESA_CI_VERIFICATION_COMMAND") || "n/a";
 const jobStatus = value("BESA_CI_JOB_STATUS") || "unknown";
 const reportArtifact = formatLink(
@@ -134,13 +148,21 @@ const summaryLabel = counts
 const lines = [
   `## ${jobLabel}`,
   "",
-  `- Job status: \`${jobStatus}\``,
-  `- Verification command: \`${verificationCommand}\``,
-  `- Test summary: ${summaryLabel}`,
-  `- Playwright report URL: ${reportArtifact}`,
-  `- Test-results artifact: ${resultsArtifact}`,
-  `- Wrapper/server logs artifact: ${logsArtifact}`,
+  `- Result: **${statusLabel(jobStatus)}**`,
 ];
+
+if (jobVariant) {
+  lines.push(`- Workflow variant: \`${jobVariant}\``);
+}
+
+lines.push(`- Raw job status: \`${jobStatus}\``);
+lines.push(`- Verification command: \`${verificationCommand}\``);
+lines.push(`- Test summary: **${summaryLabel}**`);
+lines.push("");
+lines.push("### Artifacts");
+lines.push(`- Playwright report: ${reportArtifact}`);
+lines.push(`- Test-results download: ${resultsArtifact}`);
+lines.push(`- Wrapper/server logs: ${logsArtifact}`);
 
 if (counts?.readError) {
   lines.push(`- JSON summary parse note: ${counts.readError}`);

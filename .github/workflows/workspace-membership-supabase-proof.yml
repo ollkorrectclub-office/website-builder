@@ -1,11 +1,11 @@
-name: Workspace Membership Supabase Proof
+name: Workspace Membership Optional Proof (Supabase)
 
 on:
   workflow_dispatch:
 
 jobs:
   workspace-membership-secret-gates:
-    name: Resolve workspace membership secret gates
+    name: Resolve optional workspace membership proof gates
     runs-on: ubuntu-latest
     outputs:
       supabase_membership_enabled: ${{ steps.resolve.outputs.supabase_membership_enabled }}
@@ -17,7 +17,7 @@ jobs:
       BESA_E2E_SUPABASE_WORKSPACE_SLUG: ${{ secrets.BESA_E2E_SUPABASE_WORKSPACE_SLUG }}
       BESA_E2E_SUPABASE_PROJECT_SLUG: ${{ secrets.BESA_E2E_SUPABASE_PROJECT_SLUG }}
     steps:
-      - name: Resolve secret-gated workspace membership job
+      - name: Resolve optional secret-gated workspace membership job
         id: resolve
         shell: bash
         run: |
@@ -30,7 +30,7 @@ jobs:
           echo "supabase_membership_enabled=${supabase_membership_enabled}" >> "${GITHUB_OUTPUT}"
 
   workspace-membership-supabase-proof:
-    name: Workspace membership (Supabase proof)
+    name: Workspace membership optional proof (Supabase)
     needs:
       - workspace-membership-secret-gates
     if: ${{ needs.workspace-membership-secret-gates.outputs.supabase_membership_enabled == 'true' }}
@@ -65,7 +65,7 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
-      - name: Run Supabase workspace membership proof
+      - name: Run optional Supabase workspace membership proof
         run: npm run verify:workspace-membership:supabase
 
       - name: Upload Playwright report artifact
@@ -95,10 +95,11 @@ jobs:
           if-no-files-found: ignore
           path: .artifacts/workspace-membership-supabase-proof/logs
 
-      - name: Write workspace membership proof job summary
+      - name: Write optional workspace membership proof job summary
         if: always()
         env:
-          BESA_CI_JOB_LABEL: Workspace membership (Supabase proof)
+          BESA_CI_JOB_LABEL: Workspace membership optional proof (Supabase)
+          BESA_CI_JOB_VARIANT: optional-supabase-proof
           BESA_CI_JOB_STATUS: ${{ job.status }}
           BESA_CI_VERIFICATION_COMMAND: npm run verify:workspace-membership:supabase
           BESA_CI_REPORT_ARTIFACT_NAME: workspace-membership-supabase-proof-playwright-report

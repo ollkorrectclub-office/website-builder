@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { defineConfig, devices } from "@playwright/test";
 
-const port = 3210;
+const port = Number(process.env.BESA_E2E_APP_PORT ?? "3210");
 const providerStubPort = Number(process.env.BESA_E2E_PROVIDER_STUB_PORT ?? "3291");
 const deployStubPort = Number(process.env.BESA_E2E_DEPLOY_STUB_PORT ?? "4022");
 const chromeExecutable = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -14,7 +14,9 @@ const shouldUseDeployStub = process.env.BESA_E2E_DEPLOY_STUB === "1";
 const reuseExistingServer = process.env.BESA_E2E_REUSE_SERVER === "1";
 const useExternalServer = process.env.BESA_E2E_EXTERNAL_SERVER === "1";
 const outputDir = process.env.BESA_E2E_OUTPUT_DIR ?? "test-results";
-const htmlReportFolder = process.env.BESA_E2E_HTML_REPORT_DIR ?? "playwright-report";
+const requestedHtmlReportFolder = process.env.BESA_E2E_HTML_REPORT_DIR?.trim() ?? "";
+const htmlReportFolder = requestedHtmlReportFolder || "playwright-report";
+const jsonReportPath = process.env.BESA_E2E_JSON_REPORT_PATH?.trim() ?? "";
 const locale = process.env.BESA_E2E_LOCALE ?? process.env.BESA_E2E_SUPABASE_LOCALE ?? "en";
 const storeFile = process.env.BESA_E2E_STORE_FILE ?? path.join(".data", "phase32-e2e-store.json");
 const webServerEnv = Object.fromEntries(
@@ -26,7 +28,8 @@ const webServerCommand =
     : `npm run start -- --hostname 127.0.0.1 --port ${port}`;
 const webServerTimeout = e2eRuntime === "dev" ? 180_000 : 120_000;
 const shouldUseProviderStub = providerMode !== "live";
-const shouldUseHtmlReporter = process.env.CI ? true : e2eRuntime !== "start";
+const shouldUseHtmlReporter =
+  process.env.CI ? true : e2eRuntime !== "start" || requestedHtmlReportFolder.length > 0;
 const shouldUseSystemChrome =
   process.env.BESA_E2E_USE_SYSTEM_CHROME === "1" ||
   (!process.env.CI && e2eRuntime !== "start");
@@ -93,9 +96,11 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,
-  reporter: shouldUseHtmlReporter
-    ? [["list"], ["html", { open: "never", outputFolder: htmlReportFolder }]]
-    : [["list"]],
+  reporter: [
+    ["list"],
+    ...(shouldUseHtmlReporter ? [["html", { open: "never", outputFolder: htmlReportFolder }] as const] : []),
+    ...(jsonReportPath ? [["json", { outputFile: jsonReportPath }] as const] : []),
+  ],
   outputDir,
   timeout: 120_000,
   expect: {

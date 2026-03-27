@@ -36,8 +36,12 @@ jobs:
     if: ${{ needs.workspace-membership-secret-gates.outputs.supabase_membership_enabled == 'true' }}
     runs-on: ubuntu-latest
     env:
+      BESA_E2E_RUNTIME: start
+      BESA_E2E_APP_PORT: 3213
       BESA_E2E_OUTPUT_DIR: .artifacts/workspace-membership-supabase-proof/test-results
       BESA_E2E_HTML_REPORT_DIR: .artifacts/workspace-membership-supabase-proof/playwright-report
+      BESA_E2E_JSON_REPORT_PATH: .artifacts/workspace-membership-supabase-proof/test-results/playwright-results.json
+      BESA_E2E_LOG_DIR: .artifacts/workspace-membership-supabase-proof/logs
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       BESA_E2E_SUPABASE_OWNER_EMAIL: ${{ secrets.BESA_E2E_SUPABASE_OWNER_EMAIL }}
@@ -62,11 +66,12 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run Supabase workspace membership proof
-        run: npm run lint && npm run build && npm run test:e2e:supabase:workspace-membership
+        run: npm run verify:workspace-membership:supabase
 
       - name: Upload Playwright report artifact
         if: always()
         uses: actions/upload-artifact@v6
+        id: upload_membership_report
         with:
           name: workspace-membership-supabase-proof-playwright-report
           if-no-files-found: ignore
@@ -75,7 +80,35 @@ jobs:
       - name: Upload test-results artifact
         if: always()
         uses: actions/upload-artifact@v6
+        id: upload_membership_results
         with:
           name: workspace-membership-supabase-proof-test-results
           if-no-files-found: ignore
           path: .artifacts/workspace-membership-supabase-proof/test-results
+
+      - name: Upload wrapper and server logs artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        id: upload_membership_logs
+        with:
+          name: workspace-membership-supabase-proof-wrapper-logs
+          if-no-files-found: ignore
+          path: .artifacts/workspace-membership-supabase-proof/logs
+
+      - name: Write workspace membership proof job summary
+        if: always()
+        env:
+          BESA_CI_JOB_LABEL: Workspace membership (Supabase proof)
+          BESA_CI_JOB_STATUS: ${{ job.status }}
+          BESA_CI_VERIFICATION_COMMAND: npm run verify:workspace-membership:supabase
+          BESA_CI_REPORT_ARTIFACT_NAME: workspace-membership-supabase-proof-playwright-report
+          BESA_CI_REPORT_ARTIFACT_URL: ${{ steps.upload_membership_report.outputs.artifact-url }}
+          BESA_CI_TEST_RESULTS_ARTIFACT_NAME: workspace-membership-supabase-proof-test-results
+          BESA_CI_TEST_RESULTS_ARTIFACT_URL: ${{ steps.upload_membership_results.outputs.artifact-url }}
+          BESA_CI_LOG_ARTIFACT_NAME: workspace-membership-supabase-proof-wrapper-logs
+          BESA_CI_LOG_ARTIFACT_URL: ${{ steps.upload_membership_logs.outputs.artifact-url }}
+          BESA_CI_REPORT_PATH: .artifacts/workspace-membership-supabase-proof/playwright-report
+          BESA_CI_TEST_RESULTS_PATH: .artifacts/workspace-membership-supabase-proof/test-results
+          BESA_CI_LOG_PATH: .artifacts/workspace-membership-supabase-proof/logs
+          BESA_CI_JSON_REPORT_PATH: .artifacts/workspace-membership-supabase-proof/test-results/playwright-results.json
+        run: node scripts/write-workspace-membership-proof-summary.mjs

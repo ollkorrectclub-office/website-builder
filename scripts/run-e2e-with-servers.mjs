@@ -28,10 +28,24 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitForUrl(url, label) {
+function waitForExit(child) {
+  return new Promise((resolve) => {
+    child.once("exit", (code, signal) => {
+      resolve({ code, signal });
+    });
+  });
+}
+
+async function waitForUrl(url, label, processEntry) {
   const timeoutAt = Date.now() + 120_000;
 
   while (Date.now() < timeoutAt) {
+    if (processEntry?.child.exitCode !== null) {
+      throw new Error(
+        `${label} exited before becoming ready (exit code: ${processEntry.child.exitCode ?? "unknown"}).`,
+      );
+    }
+
     try {
       const response = await fetch(url, { cache: "no-store" });
 
@@ -77,8 +91,14 @@ function spawnProcess(command, args, label) {
     });
   }
 
-  childProcesses.push({ child, label });
-  return child;
+  const processEntry = {
+    child,
+    label,
+    exitPromise: waitForExit(child),
+  };
+
+  childProcesses.push(processEntry);
+  return processEntry;
 }
 
 async function cleanup() {
@@ -101,6 +121,8 @@ async function cleanup() {
       child.kill("SIGKILL");
     }
   }
+
+  await Promise.allSettled(childProcesses.map(({ exitPromise }) => exitPromise));
 }
 
 process.on("SIGINT", async () => {
@@ -119,21 +141,21 @@ try {
   }
 
   if (process.env.BESA_E2E_PROVIDER_STUB === "1") {
-    spawnProcess("node", ["scripts/provider-e2e-stub.mjs"], "provider stub");
-    await waitForUrl(`http://127.0.0.1:${providerStubPort}/healthz`, "provider stub");
+    const providerStub = spawnProcess("node", ["scripts/provider-e2e-stub.mjs"], "provider stub");
+    await waitForUrl(`http://127.0.0.1:${providerStubPort}/healthz`, "provider stub", providerStub);
   }
 
   if (process.env.BESA_E2E_DEPLOY_STUB === "1") {
-    spawnProcess("node", ["scripts/deploy-execution-e2e-stub.mjs"], "deploy stub");
-    await waitForUrl(`http://127.0.0.1:${deployStubPort}/healthz`, "deploy stub");
+    const deployStub = spawnProcess("node", ["scripts/deploy-execution-e2e-stub.mjs"], "deploy stub");
+    await waitForUrl(`http://127.0.0.1:${deployStubPort}/healthz`, "deploy stub", deployStub);
   }
 
   const appArgs =
     runtime === "dev"
       ? ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", String(port)]
       : ["run", "start", "--", "--hostname", "127.0.0.1", "--port", String(port)];
-  spawnProcess("npm", appArgs, "app server");
-  await waitForUrl(`http://127.0.0.1:${port}/${locale}/login`, "app server");
+  const appServer = spawnProcess("npm", appArgs, "app server");
+  await waitForUrl(`http://127.0.0.1:${port}/${locale}/login`, "app server", appServer);
 
   const playwright = spawn(
     "npx",

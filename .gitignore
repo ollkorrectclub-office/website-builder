@@ -6,6 +6,7 @@ dist
 *.log
 .data
 .env.local
+.artifacts
 playwright-report
 test-results
 .DS_Store

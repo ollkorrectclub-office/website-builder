@@ -14,6 +14,7 @@ const config = [
   ...compat.extends("next/core-web-vitals"),
   {
     ignores: [
+      ".artifacts/**",
       ".next/**",
       "node_modules/**",
       "out/**",

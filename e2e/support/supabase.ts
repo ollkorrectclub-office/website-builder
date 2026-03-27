@@ -28,6 +28,14 @@ interface WorkspaceMemberRow {
   status: "active" | "deactivated";
 }
 
+interface WorkspaceInvitationRow {
+  id: string;
+  email: string;
+  status: "pending" | "accepted" | "revoked";
+  invitation_token: string;
+  created_at: string;
+}
+
 function createSupabaseAdminClient() {
   if (!supabaseUrl || !supabaseServiceRoleKey) {
     throw new Error("Supabase E2E admin client is missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.");
@@ -167,4 +175,41 @@ export async function normalizeSupabaseWorkspaceMembershipBaseline(input: {
     ownerUserId: ownerProfile.id,
     ownerMembershipId: ownerMembership.id,
   } satisfies SupabaseWorkspaceMembershipBaseline;
+}
+
+export async function waitForSupabaseWorkspaceInvitation(input: {
+  workspaceId: string;
+  email: string;
+  status?: WorkspaceInvitationRow["status"];
+  timeoutMs?: number;
+  pollIntervalMs?: number;
+}) {
+  const admin = createSupabaseAdminClient();
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const timeoutMs = input.timeoutMs ?? 15_000;
+  const pollIntervalMs = input.pollIntervalMs ?? 500;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const { data, error } = await admin
+      .from("workspace_invitations")
+      .select("id,email,status,invitation_token,created_at")
+      .eq("workspace_id", input.workspaceId)
+      .eq("email", normalizedEmail)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<WorkspaceInvitationRow>();
+
+    if (error) {
+      throw new Error(`Unable to load the Supabase invitation for ${input.email}: ${error.message}`);
+    }
+
+    if (data && (!input.status || data.status === input.status)) {
+      return data;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+
+  throw new Error(`Timed out waiting for the Supabase invitation for ${input.email}.`);
 }

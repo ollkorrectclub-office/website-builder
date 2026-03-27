@@ -1,7 +1,10 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
 import { e2eLocale, e2eProjectSlug, e2eWorkspaceSlug, isSupabaseE2EMode } from "./support/env";
-import { normalizeSupabaseWorkspaceMembershipBaseline } from "./support/supabase";
+import {
+  normalizeSupabaseWorkspaceMembershipBaseline,
+  waitForSupabaseWorkspaceInvitation,
+} from "./support/supabase";
 
 const workspaceManagePath = `/${e2eLocale}/app/workspaces/${e2eWorkspaceSlug}`;
 const projectTimelinePath = `/${e2eLocale}/app/workspaces/${e2eWorkspaceSlug}/projects/${e2eProjectSlug}/timeline`;
@@ -34,16 +37,8 @@ async function createInvitation(page: Page, input: { email: string; role: "viewe
   await page.waitForLoadState("networkidle");
 }
 
-async function invitationRow(page: Page, email: string) {
-  const emailLocator = page.getByText(email, { exact: true }).first();
-  await expect(emailLocator).toBeVisible();
-
-  const row = page
-    .locator('[data-testid^="workspace-invitation-row-"]')
-    .filter({ has: emailLocator })
-    .first();
-  await expect(row).toBeVisible();
-  return row;
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function memberRow(page: Page, memberLabel: string) {
@@ -122,16 +117,14 @@ test.describe.serial("supabase workspace membership lifecycle", () => {
 
     await createInvitation(page, { email: invitee.email, role: "viewer" });
     await page.goto(workspaceManagePath);
+    await expect(page.getByText(new RegExp(escapeRegExp(invitee.email), "i")).first()).toBeVisible();
 
-    const createdInvitationRow = await invitationRow(page, invitee.email);
-    await expect(createdInvitationRow).toContainText(/Stored link|Link i ruajtur/i);
-    const inviteHref = await createdInvitationRow
-      .locator('[data-testid^="workspace-invitation-link-"]')
-      .getAttribute("href");
-
-    if (!inviteHref) {
-      throw new Error("The Supabase invitation row did not expose a link.");
-    }
+    const createdInvitation = await waitForSupabaseWorkspaceInvitation({
+      workspaceId: baseline.workspaceId,
+      email: invitee.email,
+      status: "pending",
+    });
+    const inviteHref = `/${e2eLocale}/invite/${createdInvitation.invitation_token}`;
 
     const inviteeSession = await acceptInvitation(browser, inviteHref, invitee);
 

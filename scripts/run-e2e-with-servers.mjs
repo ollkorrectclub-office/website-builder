@@ -16,6 +16,11 @@ if (process.env.BESA_E2E_MODE !== "supabase" && !process.env.BESA_LOCAL_STORE_FI
     process.env.BESA_E2E_STORE_FILE ?? path.join(".data", "phase32-e2e-store.json");
 }
 
+if (process.env.BESA_E2E_MODE !== "supabase") {
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "";
+}
+
 if (suiteArgs.length === 0) {
   console.error("Provide one or more Playwright spec paths to run.");
   process.exit(1);

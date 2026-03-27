@@ -5,18 +5,14 @@ import {
 } from "@/lib/model-adapters/openai-compatible";
 import { ExternalProviderExecutionError } from "@/lib/model-adapters/errors";
 import { ExternalAdapterNotReadyError } from "@/lib/model-adapters/registry";
-import type { ModelAdapterTraceRecord } from "@/lib/model-adapters/types";
 import {
-  generateMockCodePatchSuggestion,
+  type CodePatchSuggestionInput,
+  type ExternalPatchSuggestionAdapterConfig,
+  type ExternalPatchSuggestionExecutionAdapter,
+  type ExternalPatchSuggestionExecutionDetails,
   type GeneratedCodePatchSuggestion,
-} from "@/lib/builder/code-patch-suggester";
-import type { ProjectCodeFileRecord } from "@/lib/builder/types";
-
-export interface ExternalPatchSuggestionInput {
-  file: Pick<ProjectCodeFileRecord, "path" | "name" | "kind" | "language">;
-  currentContent: string;
-  requestPrompt: string;
-}
+} from "@/lib/builder/code-patch-types";
+import { generateMockCodePatchSuggestion } from "@/lib/builder/code-patch-suggester";
 
 interface ExternalPatchStructuredOutput {
   title: string;
@@ -24,11 +20,6 @@ interface ExternalPatchStructuredOutput {
   changeSummary: string;
   proposedContent: string;
   notes: string;
-}
-
-export interface ExternalPatchSuggestionExecutionDetails {
-  latencyMs: number;
-  trace: ModelAdapterTraceRecord;
 }
 
 function normalizeString(value: unknown) {
@@ -66,7 +57,7 @@ function buildPatchInstructions() {
   ].join(" ");
 }
 
-function buildPatchPrompt(input: ExternalPatchSuggestionInput, baseline: GeneratedCodePatchSuggestion) {
+function buildPatchPrompt(input: CodePatchSuggestionInput, baseline: GeneratedCodePatchSuggestion) {
   return [
     "Patch request JSON:",
     JSON.stringify(
@@ -113,28 +104,16 @@ function mergePatchOutput(
   };
 }
 
-export class ExternalPatchSuggestionAdapter {
+export class ExternalPatchSuggestionAdapter implements ExternalPatchSuggestionExecutionAdapter {
   readonly source = "external_patch_adapter_v1" as const;
-  readonly config: {
-    providerKey: "openai_compatible" | "custom_http";
-    providerLabel: string;
-    modelName: string;
-    endpointUrl: string | null;
-    apiKeyEnvVar: string;
-  };
+  readonly config: ExternalPatchSuggestionAdapterConfig;
 
-  constructor(config: {
-    providerKey: "openai_compatible" | "custom_http";
-    providerLabel: string;
-    modelName: string;
-    endpointUrl: string | null;
-    apiKeyEnvVar: string;
-  }) {
+  constructor(config: ExternalPatchSuggestionAdapterConfig) {
     this.config = config;
   }
 
   async suggest(
-    input: ExternalPatchSuggestionInput,
+    input: CodePatchSuggestionInput,
   ): Promise<{ suggestion: GeneratedCodePatchSuggestion; execution: ExternalPatchSuggestionExecutionDetails }> {
     if (this.config.providerKey !== "openai_compatible") {
       throw new ExternalAdapterNotReadyError(

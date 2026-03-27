@@ -1,9 +1,15 @@
 import { requestOpenAICompatibleJson, resolveOpenAICompatibleEndpoint, readApiKeyFromEnv } from "@/lib/model-adapters/openai-compatible";
 import { ExternalProviderExecutionError } from "@/lib/model-adapters/errors";
 import { ExternalAdapterNotReadyError } from "@/lib/model-adapters/registry";
-import type { ModelAdapterTraceRecord } from "@/lib/model-adapters/types";
 import { buildPlannerArtifacts } from "@/lib/planner/utils";
-import type { PlannerInput, PlannerResult, PlannerRunTrigger } from "@/lib/planner/types";
+import type {
+  PlannerExternalAdapter,
+  PlannerExternalAdapterConfig,
+  PlannerExternalExecutionDetails,
+  PlannerInput,
+  PlannerResult,
+  PlannerRunTrigger,
+} from "@/lib/planner/types";
 import type { StructuredPlan, StructuredPlanDataModel } from "@/lib/workspaces/types";
 
 function normalizeString(value: unknown) {
@@ -208,35 +214,18 @@ interface ExternalPlannerStructuredOutput {
   };
 }
 
-export interface ExternalPlannerExecutionDetails {
-  latencyMs: number;
-  trace: ModelAdapterTraceRecord;
-}
-
-export class ExternalModelPlannerAdapter {
+export class ExternalModelPlannerAdapter implements PlannerExternalAdapter {
   readonly source = "external_model_adapter_v1" as const;
-  private readonly config: {
-    providerKey: "openai_compatible" | "custom_http";
-    providerLabel: string;
-    modelName: string;
-    endpointUrl: string | null;
-    apiKeyEnvVar: string;
-  };
+  private readonly config: PlannerExternalAdapterConfig;
 
-  constructor(config: {
-    providerKey: "openai_compatible" | "custom_http";
-    providerLabel: string;
-    modelName: string;
-    endpointUrl: string | null;
-    apiKeyEnvVar: string;
-  }) {
+  constructor(config: PlannerExternalAdapterConfig) {
     this.config = config;
   }
 
   async plan(
     input: PlannerInput,
     trigger: PlannerRunTrigger,
-  ): Promise<{ result: PlannerResult; execution: ExternalPlannerExecutionDetails }> {
+  ): Promise<{ result: PlannerResult; execution: PlannerExternalExecutionDetails }> {
     if (this.config.providerKey !== "openai_compatible") {
       throw new ExternalAdapterNotReadyError(
         `External planner adapter for ${this.config.providerLabel} is not wired beyond OpenAI-compatible planning yet.`,

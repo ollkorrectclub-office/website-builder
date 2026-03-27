@@ -43,6 +43,23 @@ async function gotoFresh(page: Page, pathname: string) {
 }
 
 async function invitationRow(page: Page, email: string) {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const row = page
+      .locator('[data-testid^="workspace-invitation-row-"]')
+      .filter({ hasText: email })
+      .first();
+
+    if ((await row.count()) > 0) {
+      await expect(row).toBeVisible();
+      return row;
+    }
+
+    if (attempt < 3) {
+      await page.waitForTimeout(1000);
+      await gotoFresh(page, workspaceManagePath);
+    }
+  }
+
   const row = page
     .locator('[data-testid^="workspace-invitation-row-"]')
     .filter({ hasText: email })

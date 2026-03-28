@@ -1,20 +1,22 @@
 import {
   type CodePatchSuggestionInput,
   type CodePatchSuggestionService,
-  type ExternalPatchSuggestionAdapterFactory,
   type CodePatchSuggestionServiceDependencies,
   type CodePatchSuggestionServiceResult,
+  type ExternalPatchSuggestionAdapterFactory,
 } from "@/lib/builder/code-patch-types";
+import { resolveEnvPatchSuggestionAdapterConfig } from "@/lib/builder/env-patch-config";
 import { MockCodePatchSuggestionAdapter } from "@/lib/builder/code-patch-suggester";
-import { ExternalPatchSuggestionAdapter } from "@/lib/builder/external-model-patch-suggester";
+import { ExternalLLMPatchSuggestionAdapter } from "@/lib/builder/external-llm-patch-suggester";
 import { ExternalProviderExecutionError, ModelAdapterExecutionError } from "@/lib/model-adapters/errors";
 import { resolveCapabilityAdapterConfig } from "@/lib/model-adapters/registry";
 import type {
   ModelAdapterExecutionRecord,
   ProjectModelAdapterConfigRecord,
+  ResolvedCapabilityAdapterConfig,
 } from "@/lib/model-adapters/types";
 
-function defaultResolvedConfig() {
+function defaultResolvedConfig(): ResolvedCapabilityAdapterConfig {
   return {
     capability: "patch_suggestion" as const,
     selection: "deterministic_internal" as const,
@@ -30,9 +32,46 @@ function defaultResolvedConfig() {
 }
 
 class DefaultExternalPatchSuggestionAdapterFactory implements ExternalPatchSuggestionAdapterFactory {
-  create(config: ConstructorParameters<typeof ExternalPatchSuggestionAdapter>[0]) {
-    return new ExternalPatchSuggestionAdapter(config);
+  create(config: ConstructorParameters<typeof ExternalLLMPatchSuggestionAdapter>[0]) {
+    return new ExternalLLMPatchSuggestionAdapter(config);
   }
+}
+
+function isBlank(value: string | null | undefined) {
+  return !value || value.trim().length === 0;
+}
+
+function looksLikeDefaultDeterministicConfig(config: ProjectModelAdapterConfigRecord) {
+  return (
+    config.planningSelection === "deterministic_internal" &&
+    config.generationSelection === "deterministic_internal" &&
+    config.patchSelection === "deterministic_internal" &&
+    isBlank(config.externalProviderLabel) &&
+    isBlank(config.externalEndpointUrl) &&
+    isBlank(config.externalApiKeyEnvVar) &&
+    isBlank(config.planningModel) &&
+    isBlank(config.generationModel) &&
+    isBlank(config.patchModel) &&
+    config.externalProviderKey === null
+  );
+}
+
+function resolvePatchSuggestionAdapterConfig(config: ProjectModelAdapterConfigRecord | null) {
+  if (config && !looksLikeDefaultDeterministicConfig(config)) {
+    return resolveCapabilityAdapterConfig(config, "patch_suggestion");
+  }
+
+  return resolveEnvPatchSuggestionAdapterConfig() ?? (config ? resolveCapabilityAdapterConfig(config, "patch_suggestion") : defaultResolvedConfig());
+}
+
+function logExternalPatchFallback(input: {
+  filePath: string;
+  providerKey: string | null;
+  providerLabel: string | null;
+  modelName: string | null;
+  reason: string;
+}) {
+  console.warn("[code-patch-service] External patch suggestion failed, falling back to mock patch suggester.", input);
 }
 
 function defaultCodePatchSuggestionServiceDependencies(): CodePatchSuggestionServiceDependencies {
@@ -52,7 +91,7 @@ class AdapterCodePatchSuggestionService implements CodePatchSuggestionService {
   }
 
   async generateSuggestion(input: CodePatchSuggestionInput): Promise<CodePatchSuggestionServiceResult> {
-    const resolved = this.config ? resolveCapabilityAdapterConfig(this.config, "patch_suggestion") : defaultResolvedConfig();
+    const resolved = resolvePatchSuggestionAdapterConfig(this.config);
     let fallbackReason: string | null = null;
 
     if (resolved.selection === "external_model") {
@@ -102,6 +141,13 @@ class AdapterCodePatchSuggestionService implements CodePatchSuggestionService {
             latencyMs = error.latencyMs;
             trace = error.trace;
           }
+          logExternalPatchFallback({
+            filePath: input.file.path,
+            providerKey: resolved.providerKey,
+            providerLabel: resolved.providerLabel,
+            modelName: resolved.modelName,
+            reason: fallbackReason,
+          });
 
           const adapterExecution = {
             capability: "patch_suggestion" as const,

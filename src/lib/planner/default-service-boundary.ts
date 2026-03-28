@@ -1,4 +1,4 @@
-import { ExternalModelPlannerAdapter } from "@/lib/planner/external-model-planner";
+import { ExternalLLMPlannerAdapter } from "@/lib/planner/external-llm-planner";
 import { RuleBasedPlannerAdapter } from "@/lib/planner/rule-based-planner";
 import type {
   PlannerExternalAdapter,
@@ -9,7 +9,7 @@ import type {
 
 class DefaultPlannerExternalAdapterFactory implements PlannerExternalAdapterFactory {
   create(config: PlannerExternalAdapterConfig): PlannerExternalAdapter {
-    return new ExternalModelPlannerAdapter(config);
+    return new ExternalLLMPlannerAdapter(config);
   }
 }
 

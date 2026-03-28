@@ -97,19 +97,12 @@ test.describe.serial("live patch provider proof", () => {
     await login(page);
 
     const prompt = `Live provider patch proof ${Date.now()}`;
-    const filePath = await page.locator('input[name="filePath"]').inputValue();
     const requestPromptField = page.locator('textarea[name="requestPrompt"]');
+    const patchRequestForm = requestPromptField.locator("xpath=ancestor::form[1]");
+    const filePath = await patchRequestForm.locator('input[name="filePath"]').inputValue();
 
     await requestPromptField.fill(prompt);
-    await requestPromptField.evaluate((element) => {
-      const form = element.closest("form");
-
-      if (!(form instanceof HTMLFormElement)) {
-        throw new Error("Patch request form not found.");
-      }
-
-      form.requestSubmit();
-    });
+    await patchRequestForm.getByTestId("code-generate-proposal-external").click();
 
     const storedProposal = await waitForProposalRecord(prompt, filePath);
 

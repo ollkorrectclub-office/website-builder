@@ -173,6 +173,22 @@ export interface OpenAICompatibleJsonResponseResult<T> {
   responseJson: Record<string, unknown>;
 }
 
+function buildTimeoutSignal(timeoutMs: number | null | undefined) {
+  if (!timeoutMs || timeoutMs <= 0) {
+    return { signal: undefined, dispose: () => {} };
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort(new Error(`Provider request timed out after ${timeoutMs}ms.`));
+  }, timeoutMs);
+
+  return {
+    signal: controller.signal,
+    dispose: () => clearTimeout(timeoutId),
+  };
+}
+
 export async function requestOpenAICompatibleJson<T>(input: {
   endpointUrl: string;
   apiKey: string;
@@ -182,6 +198,7 @@ export async function requestOpenAICompatibleJson<T>(input: {
   schemaName: string;
   schema: Record<string, unknown>;
   metadata?: Record<string, string>;
+  timeoutMs?: number | null;
   traceLabels?: {
     instructions?: string;
     input?: string;
@@ -211,6 +228,7 @@ export async function requestOpenAICompatibleJson<T>(input: {
 
   let responseText = "";
   let responseJson: Record<string, unknown> | null = null;
+  const timeout = buildTimeoutSignal(input.timeoutMs);
 
   try {
     const response = await fetch(input.endpointUrl, {
@@ -221,6 +239,7 @@ export async function requestOpenAICompatibleJson<T>(input: {
       },
       body: JSON.stringify(requestBody),
       cache: "no-store",
+      signal: timeout.signal,
     });
 
     responseText = await response.text();
@@ -320,5 +339,7 @@ export async function requestOpenAICompatibleJson<T>(input: {
       error instanceof Error ? error.message : "Provider request failed.",
       { latencyMs, trace },
     );
+  } finally {
+    timeout.dispose();
   }
 }

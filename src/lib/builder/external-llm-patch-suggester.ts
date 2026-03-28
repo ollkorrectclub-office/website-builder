@@ -57,6 +57,8 @@ function buildPatchPromptTemplate() {
   ].join(" ");
 }
 
+const PATCH_PROVIDER_TIMEOUT_MS = 90_000;
+
 function buildPatchPromptInput(input: CodePatchSuggestionInput, baseline: GeneratedCodePatchSuggestion) {
   return [
     "Patch request JSON:",
@@ -174,6 +176,7 @@ export class ExternalLLMPatchSuggestionAdapter implements ExternalPatchSuggestio
         promptInput: buildPatchPromptInput(input, baseline),
         schemaName: "builder_patch_suggestion_output",
         schema: patchSuggestionSchema(),
+        timeoutMs: PATCH_PROVIDER_TIMEOUT_MS,
         metadata: {
           capability: "patch_suggestion",
           filePath: input.file.path,

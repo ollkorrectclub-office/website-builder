@@ -1,18 +1,9 @@
-import type { CodePatchProposalSource, ProjectCodeFileRecord } from "@/lib/builder/types";
-
-interface GenerateMockCodePatchSuggestionInput {
-  file: Pick<ProjectCodeFileRecord, "path" | "name" | "kind" | "language">;
-  currentContent: string;
-  requestPrompt: string;
-}
-
-export interface GeneratedCodePatchSuggestion {
-  title: string;
-  rationale: string;
-  changeSummary: string;
-  proposedContent: string;
-  source: CodePatchProposalSource;
-}
+import type {
+  CodePatchSuggestionInput,
+  GeneratedCodePatchSuggestion,
+  PatchSuggestionAdapter,
+} from "@/lib/builder/code-patch-types";
+import type { ProjectCodeFileRecord } from "@/lib/builder/types";
 
 function sanitizePrompt(prompt: string) {
   return prompt.replace(/\s+/g, " ").trim();
@@ -113,7 +104,7 @@ function addRootDataAttribute(content: string, prompt: string) {
   return content;
 }
 
-function addMetadataExport(content: string, file: GenerateMockCodePatchSuggestionInput["file"], prompt: string) {
+function addMetadataExport(content: string, file: CodePatchSuggestionInput["file"], prompt: string) {
   if (content.includes("export const metadata")) {
     return content;
   }
@@ -158,7 +149,7 @@ function addIntegrationEntry(content: string, prompt: string) {
   return content.replace(anchor, `  "${label}",\n${anchor}`);
 }
 
-function buildProposedContent(input: GenerateMockCodePatchSuggestionInput) {
+function buildProposedContent(input: CodePatchSuggestionInput) {
   const normalizedPrompt = sanitizePrompt(input.requestPrompt).toLowerCase();
   let proposed = input.currentContent;
 
@@ -181,7 +172,7 @@ function buildProposedContent(input: GenerateMockCodePatchSuggestionInput) {
 }
 
 export function generateMockCodePatchSuggestion(
-  input: GenerateMockCodePatchSuggestionInput,
+  input: CodePatchSuggestionInput,
 ): GeneratedCodePatchSuggestion {
   const promptLabel = shortPrompt(input.requestPrompt, 64);
 
@@ -192,4 +183,12 @@ export function generateMockCodePatchSuggestion(
     proposedContent: buildProposedContent(input),
     source: "mock_assistant",
   };
+}
+
+export class MockCodePatchSuggestionAdapter implements PatchSuggestionAdapter {
+  readonly source = "mock_assistant" as const;
+
+  async suggest(input: CodePatchSuggestionInput): Promise<GeneratedCodePatchSuggestion> {
+    return generateMockCodePatchSuggestion(input);
+  }
 }

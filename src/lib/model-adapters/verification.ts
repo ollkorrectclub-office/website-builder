@@ -1,5 +1,5 @@
 import { buildProjectPermissions, buildWorkspacePermissions } from "@/lib/auth/access";
-import { ExternalPatchSuggestionAdapter } from "@/lib/builder/external-model-patch-suggester";
+import { ExternalLLMPatchSuggestionAdapter } from "@/lib/builder/external-llm-patch-suggester";
 import type { ProjectCapabilities } from "@/lib/workspaces/types";
 import { ExternalProviderExecutionError, ModelAdapterExecutionError } from "@/lib/model-adapters/errors";
 import { resolveCapabilityAdapterConfig } from "@/lib/model-adapters/registry";
@@ -10,7 +10,7 @@ import type {
   ProjectModelAdapterConfigRecord,
   ResolvedCapabilityAdapterConfig,
 } from "@/lib/model-adapters/types";
-import { ExternalModelPlannerAdapter } from "@/lib/planner/external-model-planner";
+import { ExternalLLMPlannerAdapter } from "@/lib/planner/external-llm-planner";
 import { ExternalCodegenAdapter } from "@/lib/generation/external-model-generator";
 
 function emptyCapabilities(): ProjectCapabilities {
@@ -203,7 +203,7 @@ function buildSampleGenerationInput() {
 }
 
 async function verifyPlanning(resolved: ResolvedCapabilityAdapterConfig) {
-  const adapter = new ExternalModelPlannerAdapter({
+  const adapter = new ExternalLLMPlannerAdapter({
     providerKey: resolved.providerKey ?? "custom_http",
     providerLabel: resolved.providerLabel ?? "External provider",
     modelName: resolved.modelName ?? "unknown-model",
@@ -244,7 +244,7 @@ async function verifyGeneration(resolved: ResolvedCapabilityAdapterConfig) {
 }
 
 async function verifyPatchSuggestion(resolved: ResolvedCapabilityAdapterConfig) {
-  const adapter = new ExternalPatchSuggestionAdapter({
+  const adapter = new ExternalLLMPatchSuggestionAdapter({
     providerKey: resolved.providerKey ?? "custom_http",
     providerLabel: resolved.providerLabel ?? "External provider",
     modelName: resolved.modelName ?? "unknown-model",

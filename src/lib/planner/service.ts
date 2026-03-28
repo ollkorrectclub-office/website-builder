@@ -1,34 +1,54 @@
 import { ExternalProviderExecutionError, ModelAdapterExecutionError } from "@/lib/model-adapters/errors";
 import { resolveCapabilityAdapterConfig } from "@/lib/model-adapters/registry";
-import type { ProjectModelAdapterConfigRecord } from "@/lib/model-adapters/types";
-import { ExternalModelPlannerAdapter } from "@/lib/planner/external-model-planner";
-import { RuleBasedPlannerAdapter } from "@/lib/planner/rule-based-planner";
-import type { PlannerAdapter, PlannerInput, PlannerService, PlannerServiceResult } from "@/lib/planner/types";
+import type { ProjectModelAdapterConfigRecord, ResolvedCapabilityAdapterConfig } from "@/lib/model-adapters/types";
+import { defaultPlannerServiceDependencies } from "@/lib/planner/default-service-boundary";
+import { resolveEnvPlannerAdapterConfig } from "@/lib/planner/env-config";
+import type { PlannerInput, PlannerService, PlannerServiceDependencies, PlannerServiceResult } from "@/lib/planner/types";
+
+function defaultResolvedConfig(): ResolvedCapabilityAdapterConfig {
+  return {
+    capability: "planning",
+    selection: "deterministic_internal",
+    sourceType: "deterministic_internal",
+    providerKey: null,
+    providerLabel: null,
+    endpointUrl: null,
+    apiKeyEnvVar: null,
+    modelName: null,
+    externalReady: false,
+    missingFields: [],
+  };
+}
+
+function resolvePlannerAdapterConfig(config: ProjectModelAdapterConfigRecord | null) {
+  if (config) {
+    return resolveCapabilityAdapterConfig(config, "planning");
+  }
+
+  return resolveEnvPlannerAdapterConfig() ?? defaultResolvedConfig();
+}
+
+function logExternalPlannerFallback(input: {
+  trigger: "project_create" | "project_rerun";
+  providerKey: string | null;
+  providerLabel: string | null;
+  modelName: string | null;
+  reason: string;
+}) {
+  console.warn("[planner-service] External planner failed, falling back to rule-based planning.", input);
+}
 
 class AdapterPlannerService implements PlannerService {
-  private readonly deterministicAdapter: PlannerAdapter;
+  private readonly dependencies: PlannerServiceDependencies;
   private readonly config: ProjectModelAdapterConfigRecord | null;
 
-  constructor(adapter: PlannerAdapter, config: ProjectModelAdapterConfigRecord | null) {
-    this.deterministicAdapter = adapter;
+  constructor(dependencies: PlannerServiceDependencies, config: ProjectModelAdapterConfigRecord | null) {
+    this.dependencies = dependencies;
     this.config = config;
   }
 
   private async execute(input: PlannerInput, trigger: "project_create" | "project_rerun"): Promise<PlannerServiceResult> {
-    const resolved = this.config
-      ? resolveCapabilityAdapterConfig(this.config, "planning")
-      : {
-          capability: "planning" as const,
-          selection: "deterministic_internal" as const,
-          sourceType: "deterministic_internal" as const,
-          providerKey: null,
-          providerLabel: null,
-          endpointUrl: null,
-          apiKeyEnvVar: null,
-          modelName: null,
-          externalReady: false,
-          missingFields: [],
-        };
+    const resolved = resolvePlannerAdapterConfig(this.config);
     let fallbackReason: string | null = null;
 
     if (resolved.selection === "external_model") {
@@ -39,7 +59,7 @@ class AdapterPlannerService implements PlannerService {
         let trace = null;
 
         try {
-          const externalAdapter = new ExternalModelPlannerAdapter({
+          const externalAdapter = this.dependencies.externalAdapterFactory.create({
             providerKey: resolved.providerKey ?? "custom_http",
             providerLabel: resolved.providerLabel ?? "External provider",
             modelName: resolved.modelName ?? "unknown-model",
@@ -78,6 +98,13 @@ class AdapterPlannerService implements PlannerService {
             latencyMs = error.latencyMs;
             trace = error.trace;
           }
+          logExternalPlannerFallback({
+            trigger,
+            providerKey: resolved.providerKey,
+            providerLabel: resolved.providerLabel,
+            modelName: resolved.modelName,
+            reason: fallbackReason,
+          });
 
           const adapterExecution = {
             capability: "planning" as const,
@@ -86,7 +113,7 @@ class AdapterPlannerService implements PlannerService {
             sourceType: "deterministic_internal" as const,
             executionMode: "fallback" as const,
             requestedAdapterKey: "external_model_adapter_v1",
-            executedAdapterKey: this.deterministicAdapter.source,
+            executedAdapterKey: this.dependencies.deterministicAdapter.source,
             providerKey: resolved.providerKey,
             providerLabel: resolved.providerLabel,
             modelName: resolved.modelName,
@@ -94,7 +121,7 @@ class AdapterPlannerService implements PlannerService {
             latencyMs,
             trace,
             fallbackReason,
-            summary: `Planner run fell back to ${this.deterministicAdapter.source}: ${fallbackReason}`,
+            summary: `Planner run fell back to ${this.dependencies.deterministicAdapter.source}: ${fallbackReason}`,
             metadata: {
               trigger,
               missingFields: resolved.missingFields,
@@ -103,7 +130,7 @@ class AdapterPlannerService implements PlannerService {
           };
 
           try {
-            const result = await this.deterministicAdapter.plan(input, trigger);
+            const result = await this.dependencies.deterministicAdapter.plan(input, trigger);
             return {
               result,
               adapterExecution,
@@ -125,8 +152,10 @@ class AdapterPlannerService implements PlannerService {
       sourceType: "deterministic_internal" as const,
       executionMode: fallbackReason ? ("fallback" as const) : ("selected" as const),
       requestedAdapterKey:
-        resolved.selection === "external_model" ? "external_model_adapter_v1" : this.deterministicAdapter.source,
-      executedAdapterKey: this.deterministicAdapter.source,
+        resolved.selection === "external_model"
+          ? "external_model_adapter_v1"
+          : this.dependencies.deterministicAdapter.source,
+      executedAdapterKey: this.dependencies.deterministicAdapter.source,
       providerKey: resolved.providerKey,
       providerLabel: resolved.providerLabel,
       modelName: resolved.modelName,
@@ -135,8 +164,8 @@ class AdapterPlannerService implements PlannerService {
       trace: null,
       fallbackReason,
       summary: fallbackReason
-        ? `Planner run fell back to ${this.deterministicAdapter.source}: ${fallbackReason}`
-        : `Planner run executed with ${this.deterministicAdapter.source}.`,
+        ? `Planner run fell back to ${this.dependencies.deterministicAdapter.source}: ${fallbackReason}`
+        : `Planner run executed with ${this.dependencies.deterministicAdapter.source}.`,
       metadata: {
         trigger,
         missingFields: resolved.missingFields,
@@ -144,7 +173,7 @@ class AdapterPlannerService implements PlannerService {
     };
 
     try {
-      const result = await this.deterministicAdapter.plan(input, trigger);
+      const result = await this.dependencies.deterministicAdapter.plan(input, trigger);
       return {
         result,
         adapterExecution,
@@ -166,6 +195,17 @@ class AdapterPlannerService implements PlannerService {
   }
 }
 
-export function getPlannerService(config: ProjectModelAdapterConfigRecord | null = null): PlannerService {
-  return new AdapterPlannerService(new RuleBasedPlannerAdapter(), config);
+export function getPlannerService(
+  config: ProjectModelAdapterConfigRecord | null = null,
+  overrides: Partial<PlannerServiceDependencies> = {},
+): PlannerService {
+  const defaults = defaultPlannerServiceDependencies();
+
+  return new AdapterPlannerService(
+    {
+      deterministicAdapter: overrides.deterministicAdapter ?? defaults.deterministicAdapter,
+      externalAdapterFactory: overrides.externalAdapterFactory ?? defaults.externalAdapterFactory,
+    },
+    config,
+  );
 }

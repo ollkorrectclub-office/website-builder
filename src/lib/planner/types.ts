@@ -3,7 +3,7 @@ import type {
   ProjectBriefFields,
   StructuredPlan,
 } from "@/lib/workspaces/types";
-import type { ModelAdapterExecutionRecord } from "@/lib/model-adapters/types";
+import type { ModelAdapterExecutionRecord, ModelAdapterTraceRecord } from "@/lib/model-adapters/types";
 
 export type PlannerRunStatus = "completed" | "failed";
 export type PlannerRunTrigger = "project_create" | "project_rerun";
@@ -41,6 +41,31 @@ export interface PlannerAdapter {
   plan(input: PlannerInput, trigger: PlannerRunTrigger): Promise<PlannerResult>;
 }
 
+export interface PlannerExternalExecutionDetails {
+  latencyMs: number;
+  trace: ModelAdapterTraceRecord;
+}
+
+export interface PlannerExternalAdapterConfig {
+  providerKey: "openai_compatible" | "custom_http";
+  providerLabel: string;
+  modelName: string;
+  endpointUrl: string | null;
+  apiKeyEnvVar: string;
+}
+
+export interface PlannerExternalAdapter {
+  readonly source: "external_model_adapter_v1";
+  plan(
+    input: PlannerInput,
+    trigger: PlannerRunTrigger,
+  ): Promise<{ result: PlannerResult; execution: PlannerExternalExecutionDetails }>;
+}
+
+export interface PlannerExternalAdapterFactory {
+  create(config: PlannerExternalAdapterConfig): PlannerExternalAdapter;
+}
+
 export interface PlannerService {
   generateInitialPlan(input: PlannerInput): Promise<PlannerServiceResult>;
   rerunPlan(input: PlannerInput): Promise<PlannerServiceResult>;
@@ -49,6 +74,11 @@ export interface PlannerService {
 export interface PlannerServiceResult {
   result: PlannerResult;
   adapterExecution: ModelAdapterExecutionRecord;
+}
+
+export interface PlannerServiceDependencies {
+  deterministicAdapter: PlannerAdapter;
+  externalAdapterFactory: PlannerExternalAdapterFactory;
 }
 
 export interface PlannerRunRecord {

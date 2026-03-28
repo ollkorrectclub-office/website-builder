@@ -1,0 +1,79 @@
+name: Planner Provider Live Proof
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  planner-provider-live-proof:
+    runs-on: ubuntu-latest
+    env:
+      BESA_E2E_RUNTIME: start
+      BESA_E2E_PROVIDER_MODE: live
+      ENABLE_EXTERNAL_PLANNER: "true"
+      EXTERNAL_PLANNER_MODEL: gpt-5.4-mini
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run live planner provider proof
+        run: npm run verify:planner-provider:live-proof
+
+      - name: Upload Playwright report artifact
+        if: always()
+        id: upload_planner_live_report
+        uses: actions/upload-artifact@v6
+        with:
+          name: planner-provider-live-proof-playwright-report
+          path: .artifacts/planner-provider-live-proof/playwright-report
+          if-no-files-found: warn
+
+      - name: Upload test-results artifact
+        if: always()
+        id: upload_planner_live_results
+        uses: actions/upload-artifact@v6
+        with:
+          name: planner-provider-live-proof-test-results
+          path: .artifacts/planner-provider-live-proof/test-results
+          if-no-files-found: warn
+
+      - name: Upload wrapper and server logs artifact
+        if: always()
+        id: upload_planner_live_logs
+        uses: actions/upload-artifact@v6
+        with:
+          name: planner-provider-live-proof-wrapper-logs
+          path: .artifacts/planner-provider-live-proof/logs
+          if-no-files-found: warn
+
+      - name: Write planner provider live proof job summary
+        if: always()
+        env:
+          BESA_CI_JOB_LABEL: Planner provider live proof
+          BESA_CI_JOB_VARIANT: live_hosted_provider
+          BESA_CI_JOB_STATUS: ${{ job.status }}
+          BESA_CI_VERIFICATION_COMMAND: npm run verify:planner-provider:live-proof
+          BESA_CI_REPORT_ARTIFACT_NAME: planner-provider-live-proof-playwright-report
+          BESA_CI_REPORT_ARTIFACT_URL: ${{ steps.upload_planner_live_report.outputs.artifact-url }}
+          BESA_CI_TEST_RESULTS_ARTIFACT_NAME: planner-provider-live-proof-test-results
+          BESA_CI_TEST_RESULTS_ARTIFACT_URL: ${{ steps.upload_planner_live_results.outputs.artifact-url }}
+          BESA_CI_LOG_ARTIFACT_NAME: planner-provider-live-proof-wrapper-logs
+          BESA_CI_LOG_ARTIFACT_URL: ${{ steps.upload_planner_live_logs.outputs.artifact-url }}
+          BESA_CI_REPORT_PATH: .artifacts/planner-provider-live-proof/playwright-report
+          BESA_CI_TEST_RESULTS_PATH: .artifacts/planner-provider-live-proof/test-results
+          BESA_CI_LOG_PATH: .artifacts/planner-provider-live-proof/logs
+          BESA_CI_JSON_REPORT_PATH: .artifacts/planner-provider-live-proof/test-results/playwright-results.json
+        run: node scripts/write-playwright-proof-summary.mjs

@@ -16,7 +16,7 @@ function normalizeProviderKey(value: string | null): ExternalModelProviderKey {
   }
 }
 
-function buildEnvPatchSuggestionConfig(): ProjectModelAdapterConfigRecord {
+export function buildEnvPatchSuggestionConfigRecord(): ProjectModelAdapterConfigRecord {
   const providerKey = normalizeProviderKey(getOptionalEnv("EXTERNAL_PATCH_PROVIDER_KEY"));
   const timestamp = new Date().toISOString();
 
@@ -45,5 +45,13 @@ export function resolveEnvPatchSuggestionAdapterConfig(): ResolvedCapabilityAdap
     return null;
   }
 
-  return resolveCapabilityAdapterConfig(buildEnvPatchSuggestionConfig(), "patch_suggestion");
+  return resolveCapabilityAdapterConfig(buildEnvPatchSuggestionConfigRecord(), "patch_suggestion");
+}
+
+export function resolveEnvPatchSuggestionConfigRecord(): ProjectModelAdapterConfigRecord | null {
+  if (!isEnvFlagEnabled("ENABLE_EXTERNAL_PATCH_SUGGESTION", "enableExternalPatchSuggestion")) {
+    return null;
+  }
+
+  return buildEnvPatchSuggestionConfigRecord();
 }

@@ -1,6 +1,7 @@
 import { createCodeScaffold } from "@/lib/builder/code-scaffold";
 import { buildCodeSyncRecords } from "@/lib/builder/code-guardrails";
 import { generateCodePatchSuggestion } from "@/lib/builder/code-patch-service";
+import { resolveEnvPatchSuggestionConfigRecord } from "@/lib/builder/env-patch-config";
 import {
   getActiveBuilderRefreshQueueItem,
   listProjectBuilderRefreshQueue,
@@ -75,6 +76,54 @@ function sortPatchProposals(proposals: ProjectCodePatchProposalRecord[]) {
     }
 
     return (b.archivedAt ?? b.createdAt).localeCompare(a.archivedAt ?? a.createdAt);
+  });
+}
+
+function isBlank(value: string | null | undefined) {
+  return !value || value.trim().length === 0;
+}
+
+function looksLikeDefaultDeterministicAdapterConfig(
+  config: Awaited<ReturnType<typeof getProjectModelAdapterConfigByIds>> | null,
+) {
+  if (!config) {
+    return true;
+  }
+
+  return (
+    config.planningSelection === "deterministic_internal" &&
+    config.generationSelection === "deterministic_internal" &&
+    config.patchSelection === "deterministic_internal" &&
+    isBlank(config.externalProviderLabel) &&
+    isBlank(config.externalEndpointUrl) &&
+    isBlank(config.externalApiKeyEnvVar) &&
+    isBlank(config.planningModel) &&
+    isBlank(config.generationModel) &&
+    isBlank(config.patchModel) &&
+    config.externalProviderKey === null
+  );
+}
+
+function resolveRequestedPatchSelectionConfig(
+  adapterConfig: Awaited<ReturnType<typeof getProjectModelAdapterConfigByIds>>,
+  requestedSelectionOverride: CreateCodePatchProposalInput["requestedSelectionOverride"],
+  workspaceId: string,
+  projectId: string,
+) {
+  if (!requestedSelectionOverride) {
+    return adapterConfig;
+  }
+
+  const baseConfig =
+    requestedSelectionOverride === "external_model" && looksLikeDefaultDeterministicAdapterConfig(adapterConfig)
+      ? resolveEnvPatchSuggestionConfigRecord()
+      : adapterConfig;
+
+  return withCapabilitySelectionOverride(baseConfig, {
+    workspaceId,
+    projectId,
+    capability: "patch_suggestion",
+    selection: requestedSelectionOverride,
   });
 }
 
@@ -2117,14 +2166,12 @@ async function createCodePatchProposalLocal(
   const { file, workingContent } = ensurePatchableFile(bundle, filePath);
   const normalizedPrompt = ensurePatchPrompt(requestPrompt);
   const adapterConfig = await getProjectModelAdapterConfigByIds(bundle.project.id, bundle.workspace.id);
-  const effectiveAdapterConfig = requestedSelectionOverride
-    ? withCapabilitySelectionOverride(adapterConfig, {
-        workspaceId: bundle.workspace.id,
-        projectId: bundle.project.id,
-        capability: "patch_suggestion",
-        selection: requestedSelectionOverride,
-      })
-    : adapterConfig;
+  const effectiveAdapterConfig = resolveRequestedPatchSelectionConfig(
+    adapterConfig,
+    requestedSelectionOverride,
+    bundle.workspace.id,
+    bundle.project.id,
+  );
   const timestamp = nowIso();
   let generated: Awaited<ReturnType<typeof generateCodePatchSuggestion>>;
 
@@ -2217,14 +2264,12 @@ async function createCodePatchProposalSupabase(
   const { file, workingContent } = ensurePatchableFile(bundle, filePath);
   const normalizedPrompt = ensurePatchPrompt(requestPrompt);
   const adapterConfig = await getProjectModelAdapterConfigByIds(bundle.project.id, bundle.workspace.id);
-  const effectiveAdapterConfig = requestedSelectionOverride
-    ? withCapabilitySelectionOverride(adapterConfig, {
-        workspaceId: bundle.workspace.id,
-        projectId: bundle.project.id,
-        capability: "patch_suggestion",
-        selection: requestedSelectionOverride,
-      })
-    : adapterConfig;
+  const effectiveAdapterConfig = resolveRequestedPatchSelectionConfig(
+    adapterConfig,
+    requestedSelectionOverride,
+    bundle.workspace.id,
+    bundle.project.id,
+  );
   const timestamp = nowIso();
   let generated: Awaited<ReturnType<typeof generateCodePatchSuggestion>>;
 

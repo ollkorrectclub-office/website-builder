@@ -11,6 +11,7 @@ import {
 } from "./support/env";
 
 const projectBasePath = e2eProjectBasePath;
+const proofFilePath = "next.config.ts";
 
 interface StoredPatchProposal {
   id: string;
@@ -48,7 +49,10 @@ function looksLikeDiffPayload(value: string) {
   );
 }
 
-async function login(page: Page, nextPath = `${projectBasePath}/code`) {
+async function login(
+  page: Page,
+  nextPath = `${projectBasePath}/code?file=${encodeURIComponent(proofFilePath)}`,
+) {
   await page.goto(`/${e2eLocale}/login?next=${encodeURIComponent(nextPath)}`);
   await page.getByTestId("login-email").fill("arta@besa.studio");
   await page.getByTestId("login-password").fill("phase1-demo");
@@ -99,10 +103,13 @@ test.describe.serial("live patch provider proof", () => {
     const prompt = `Live provider patch proof ${Date.now()}`;
     const requestPromptField = page.locator('textarea[name="requestPrompt"]');
     const patchRequestForm = requestPromptField.locator("xpath=ancestor::form[1]");
+    const externalSubmitButton = patchRequestForm.getByTestId("code-generate-proposal-external");
     const filePath = await patchRequestForm.locator('input[name="filePath"]').inputValue();
 
+    expect(filePath).toBe(proofFilePath);
+    await expect(externalSubmitButton).toBeEnabled();
     await requestPromptField.fill(prompt);
-    await patchRequestForm.getByTestId("code-generate-proposal-external").click();
+    await externalSubmitButton.click();
 
     const storedProposal = await waitForProposalRecord(prompt, filePath);
 

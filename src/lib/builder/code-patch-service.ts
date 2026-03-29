@@ -69,6 +69,9 @@ function logExternalPatchFallback(input: {
   providerKey: string | null;
   providerLabel: string | null;
   modelName: string | null;
+  endpointUrl: string | null;
+  classification: string | null;
+  latencyMs: number | null;
   reason: string;
 }) {
   console.warn("[code-patch-service] External patch suggestion failed, falling back to mock patch suggester.", input);
@@ -136,16 +139,24 @@ class AdapterCodePatchSuggestionService implements CodePatchSuggestionService {
             },
           };
         } catch (error) {
-          fallbackReason = error instanceof Error ? error.message : "External patch adapter failed.";
-          if (error instanceof ExternalProviderExecutionError) {
-            latencyMs = error.latencyMs;
-            trace = error.trace;
+          const providerError = error instanceof ExternalProviderExecutionError ? error : null;
+          fallbackReason = providerError
+            ? `[${providerError.classification}] ${providerError.message}`
+            : error instanceof Error
+              ? error.message
+              : "External patch adapter failed.";
+          if (providerError) {
+            latencyMs = providerError.latencyMs;
+            trace = providerError.trace;
           }
           logExternalPatchFallback({
             filePath: input.file.path,
             providerKey: resolved.providerKey,
             providerLabel: resolved.providerLabel,
             modelName: resolved.modelName,
+            endpointUrl: resolved.endpointUrl,
+            classification: providerError?.classification ?? null,
+            latencyMs,
             reason: fallbackReason,
           });
 

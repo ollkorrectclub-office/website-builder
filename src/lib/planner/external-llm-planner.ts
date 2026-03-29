@@ -21,15 +21,15 @@ function normalizeStringList(value: unknown) {
     return [];
   }
 
-  return value
-    .map((item) => normalizeString(item))
-    .filter(Boolean);
+  return [...new Set(value.map((item) => normalizeString(item)).filter(Boolean))];
 }
 
 function normalizeDataModels(value: unknown): StructuredPlanDataModel[] {
   if (!Array.isArray(value)) {
     return [];
   }
+
+  const seen = new Set<string>();
 
   return value
     .map((item) => {
@@ -50,7 +50,20 @@ function normalizeDataModels(value: unknown): StructuredPlanDataModel[] {
         description,
       } satisfies StructuredPlanDataModel;
     })
-    .filter((item): item is StructuredPlanDataModel => item !== null);
+    .filter((item): item is StructuredPlanDataModel => {
+      if (!item) {
+        return false;
+      }
+
+      const key = item.name.toLowerCase();
+
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    });
 }
 
 function validateStructuredPlanPayload(value: unknown): StructuredPlan {
@@ -84,6 +97,100 @@ function validateStructuredPlanPayload(value: unknown): StructuredPlan {
   }
 
   return plan;
+}
+
+function validatePlanningSignals(
+  value: unknown,
+  input: PlannerInput,
+  plan: StructuredPlan,
+) {
+  if (!value || typeof value !== "object") {
+    throw new Error("Provider output did not include a valid planning signals object.");
+  }
+
+  const record = value as Record<string, unknown>;
+  const enabledCapabilities = Object.entries(input.capabilities)
+    .filter(([, enabled]) => enabled)
+    .map(([key]) => key);
+  const requestedPageCount =
+    typeof record.requestedPageCount === "number" ? record.requestedPageCount : Number.NaN;
+  const resolvedPageCount =
+    typeof record.resolvedPageCount === "number" ? record.resolvedPageCount : Number.NaN;
+  const providerCapabilities = normalizeStringList(record.enabledCapabilities);
+  const notes = normalizeString(record.notes);
+
+  if (!Number.isInteger(requestedPageCount) || requestedPageCount < 1) {
+    throw new Error("Provider output did not include a valid requested page count.");
+  }
+
+  if (!Number.isInteger(resolvedPageCount) || resolvedPageCount !== plan.pageMap.length) {
+    throw new Error("Provider output did not include a valid resolved page count.");
+  }
+
+  if (
+    providerCapabilities.length === 0 ||
+    providerCapabilities.some((value) => !enabledCapabilities.includes(value))
+  ) {
+    throw new Error("Provider output included invalid enabled capabilities.");
+  }
+
+  if (!notes) {
+    throw new Error("Provider output did not include provider notes for planning signals.");
+  }
+
+  return {
+    requestedPageCount,
+    resolvedPageCount,
+    enabledCapabilities: providerCapabilities,
+    notes,
+  };
+}
+
+function matchesStructuredPlan(left: Record<string, unknown>, plan: StructuredPlan) {
+  return (
+    left.productSummary === plan.productSummary &&
+    JSON.stringify(left.targetUsers) === JSON.stringify(plan.targetUsers) &&
+    JSON.stringify(left.pageMap) === JSON.stringify(plan.pageMap) &&
+    JSON.stringify(left.featureList) === JSON.stringify(plan.featureList) &&
+    JSON.stringify(left.dataModels) === JSON.stringify(plan.dataModels) &&
+    JSON.stringify(left.authRoles) === JSON.stringify(plan.authRoles) &&
+    JSON.stringify(left.integrationsNeeded) === JSON.stringify(plan.integrationsNeeded) &&
+    left.designDirection === plan.designDirection
+  );
+}
+
+function validatePlannerArtifacts(
+  input: PlannerInput,
+  plan: StructuredPlan,
+  artifacts: PlannerResult["artifacts"],
+) {
+  const normalizedBrief = artifacts.find((artifact) => artifact.artifactType === "normalized_brief");
+  const planningSignals = artifacts.find((artifact) => artifact.artifactType === "planning_signals");
+  const planPayload = artifacts.find((artifact) => artifact.artifactType === "plan_payload");
+
+  if (!normalizedBrief || !planningSignals || !planPayload) {
+    throw new Error("Planner artifacts did not include the required normalized_brief, planning_signals, and plan_payload records.");
+  }
+
+  if (normalizedBrief.payload.name !== input.name || normalizedBrief.payload.projectType !== input.projectType) {
+    throw new Error("Normalized brief artifact did not preserve the expected project brief fields.");
+  }
+
+  if (
+    typeof planningSignals.payload.requestedPageCount !== "number" ||
+    typeof planningSignals.payload.resolvedPageCount !== "number" ||
+    !Array.isArray(planningSignals.payload.enabledCapabilities)
+  ) {
+    throw new Error("Planning signals artifact did not preserve the expected signal fields.");
+  }
+
+  if (planningSignals.payload.resolvedPageCount !== plan.pageMap.length) {
+    throw new Error("Planning signals artifact did not stay aligned with the final plan.");
+  }
+
+  if (!matchesStructuredPlan(planPayload.payload, plan)) {
+    throw new Error("Plan payload artifact did not match the validated structured plan.");
+  }
 }
 
 function planningSummary(name: string, trigger: PlannerRunTrigger, pageCount: number, capabilityCount: number) {
@@ -173,15 +280,28 @@ function buildPlannerPromptTemplate() {
     "You are the planning model for a structured website and app builder.",
     "Return JSON only and match the provided schema exactly.",
     "Use only the project brief. Make careful but conservative inferences when details are missing.",
+    "Produce output that is immediately safe to store as downstream normalized_brief, planning_signals, and plan_payload artifacts.",
+    "Every required string must be non-empty, concise, and product-appropriate.",
+    "Every list must contain unique non-empty items only.",
     "Keep page names short and product-facing.",
     "Keep feature, auth role, and integration lists concrete and implementation-friendly.",
+    "signals.requestedPageCount must reflect the requested page/feature scope from the brief.",
+    "signals.resolvedPageCount must exactly match the final number of plan.pageMap entries.",
+    "signals.enabledCapabilities must contain only enabled capability keys from the brief.",
+    "signals.notes must explain the main planning tradeoff in one short sentence.",
     "Do not include markdown, code fences, or explanation outside the schema.",
   ].join(" ");
 }
 
 function buildPlannerPromptInput(input: PlannerInput, trigger: PlannerRunTrigger) {
+  const enabledCapabilities = Object.entries(input.capabilities)
+    .filter(([, enabled]) => enabled)
+    .map(([key]) => key);
+
   return [
     `Planner trigger: ${trigger}`,
+    `Enabled capability keys: ${enabledCapabilities.join(", ") || "none"}`,
+    `Requested page/feature hints count: ${input.desiredPagesFeatures.length}`,
     "Project brief JSON:",
     JSON.stringify(
       {
@@ -221,15 +341,14 @@ function transformProviderOutputToPlannerResult(
   providerOutput: ExternalPlannerStructuredOutput,
 ): PlannerResult {
   const plan = validateStructuredPlanPayload(providerOutput.plan);
+  const signals = validatePlanningSignals(providerOutput.signals, input, plan);
   const enabledCapabilities = Object.entries(input.capabilities)
     .filter(([, enabled]) => enabled)
     .map(([key]) => key);
   const summary =
     normalizeString(providerOutput.summary) ||
     planningSummary(input.name, trigger, plan.pageMap.length, enabledCapabilities.length);
-  const signals = providerOutput.signals;
-
-  return {
+  const result: PlannerResult = {
     plan,
     source: "external_model_adapter_v1",
     summary,
@@ -260,7 +379,13 @@ function transformProviderOutputToPlannerResult(
         : artifact,
     ),
   };
+
+  validatePlannerArtifacts(input, plan, result.artifacts);
+
+  return result;
 }
+
+const PLANNER_PROVIDER_TIMEOUT_MS = 90_000;
 
 export class ExternalLLMPlannerAdapter implements PlannerExternalAdapter {
   readonly source = "external_model_adapter_v1" as const;
@@ -307,6 +432,7 @@ export class ExternalLLMPlannerAdapter implements PlannerExternalAdapter {
           capability: "planning",
           trigger,
         },
+        timeoutMs: PLANNER_PROVIDER_TIMEOUT_MS,
         traceLabels: {
           instructions: "Planner prompt template",
           input: "Planner brief payload",
@@ -324,12 +450,23 @@ export class ExternalLLMPlannerAdapter implements PlannerExternalAdapter {
       );
     }
 
-    return {
-      result: transformProviderOutputToPlannerResult(input, trigger, this.config, providerResponse.parsed),
-      execution: {
-        latencyMs: providerResponse.latencyMs,
-        trace: providerResponse.trace,
-      },
-    };
+    try {
+      return {
+        result: transformProviderOutputToPlannerResult(input, trigger, this.config, providerResponse.parsed),
+        execution: {
+          latencyMs: providerResponse.latencyMs,
+          trace: providerResponse.trace,
+        },
+      };
+    } catch (error) {
+      throw new ExternalProviderExecutionError(
+        error instanceof Error ? error.message : "External planning output was invalid.",
+        {
+          latencyMs: providerResponse.latencyMs,
+          trace: providerResponse.trace,
+          classification: "invalid_output",
+        },
+      );
+    }
   }
 }

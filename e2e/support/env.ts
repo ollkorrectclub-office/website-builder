@@ -62,6 +62,17 @@ export const e2eProjectBasePath =
     ? `/${e2eLocale}/app/workspaces/${e2eWorkspaceSlug}/projects/${e2eProjectSlug}`
     : "";
 
+export const e2eSupabaseDeployWorkspaceSlug =
+  process.env.BESA_E2E_SUPABASE_DEPLOY_WORKSPACE_SLUG?.trim() || e2eWorkspaceSlug;
+
+export const e2eSupabaseDeployProjectSlug =
+  process.env.BESA_E2E_SUPABASE_DEPLOY_PROJECT_SLUG?.trim() || e2eProjectSlug;
+
+export const e2eSupabaseDeployProjectBasePath =
+  e2eSupabaseDeployWorkspaceSlug && e2eSupabaseDeployProjectSlug
+    ? `/${e2eLocale}/app/workspaces/${e2eSupabaseDeployWorkspaceSlug}/projects/${e2eSupabaseDeployProjectSlug}`
+    : "";
+
 export function isLocalE2EMode() {
   return e2eMode === "local";
 }

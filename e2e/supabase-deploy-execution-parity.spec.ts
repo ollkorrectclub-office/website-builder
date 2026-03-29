@@ -3,10 +3,11 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   e2eLocale,
   e2eProjectBasePath,
+  e2eSupabaseDeployProjectBasePath,
   isSupabaseE2EMode,
 } from "./support/env";
 
-const projectBasePath = e2eProjectBasePath;
+const projectBasePath = e2eSupabaseDeployProjectBasePath || e2eProjectBasePath;
 const ownerEmail = process.env.BESA_E2E_SUPABASE_OWNER_EMAIL ?? "";
 const ownerPassword = process.env.BESA_E2E_SUPABASE_OWNER_PASSWORD ?? "";
 const deployStubBaseUrl = `http://127.0.0.1:${process.env.BESA_E2E_DEPLOY_STUB_PORT ?? "4022"}`;

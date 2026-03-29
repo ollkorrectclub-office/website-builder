@@ -5,6 +5,9 @@ import { getProjectAuditTimeline } from "@/lib/builder/audit-repository";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
 import type { Locale } from "@/lib/i18n/locales";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function ProjectTimelinePage({
   params,
   searchParams,

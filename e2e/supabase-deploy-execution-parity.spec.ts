@@ -11,6 +11,10 @@ const projectBasePath = e2eSupabaseDeployProjectBasePath || e2eProjectBasePath;
 const ownerEmail = process.env.BESA_E2E_SUPABASE_OWNER_EMAIL ?? "";
 const ownerPassword = process.env.BESA_E2E_SUPABASE_OWNER_PASSWORD ?? "";
 const deployStubBaseUrl = `http://127.0.0.1:${process.env.BESA_E2E_DEPLOY_STUB_PORT ?? "4022"}`;
+const deployExecutionRecheckedPattern =
+  e2eLocale === "sq" ? /Hosting execution u rikontrollua/i : /Hosting execution rechecked/i;
+const deployExecutionRetriedPattern =
+  e2eLocale === "sq" ? /Hosting execution u riprovua/i : /Hosting execution retried/i;
 
 function serializeDeployStubConfig() {
   return [
@@ -51,6 +55,24 @@ async function openDeployTimeline(page: Page) {
   await page.waitForLoadState("networkidle");
 }
 
+function isExecutionContextUrl(url: URL, executionRunId: string) {
+  return (
+    url.pathname === `${projectBasePath}/deploy` &&
+    url.searchParams.get("executionRun") === executionRunId &&
+    url.searchParams.has("deployRun") &&
+    url.searchParams.has("release")
+  );
+}
+
+function isNextExecutionContextUrl(url: URL, previousExecutionRunId: string) {
+  return (
+    url.pathname === `${projectBasePath}/deploy` &&
+    url.searchParams.get("executionRun") !== previousExecutionRunId &&
+    url.searchParams.has("deployRun") &&
+    url.searchParams.has("release")
+  );
+}
+
 test.describe.serial("supabase deploy execution parity", () => {
   test.skip(!isSupabaseE2EMode(), "This suite only runs when Supabase deploy parity mode is enabled.");
 
@@ -67,10 +89,13 @@ test.describe.serial("supabase deploy execution parity", () => {
     await expect(page).toHaveURL(/executionRun=/);
     await expect(page.getByText("BUILDING").first()).toBeVisible();
     const initialExecutionRunId = new URL(page.url()).searchParams.get("executionRun");
+    expect(initialExecutionRunId).not.toBeNull();
 
     await openDeployTimeline(page);
     const executionCard = page
-      .locator('[data-testid="timeline-event-card"][data-event-kind="deploy_execution_run"]')
+      .locator(
+        `[data-testid="timeline-event-card"][data-event-kind="deploy_execution_run"][data-entity-id="${initialExecutionRunId}"]`,
+      )
       .first();
     await expect(executionCard).toContainText(/Hosting execution/i);
     await expect(executionCard.getByTestId("timeline-open-context")).toHaveAttribute(
@@ -81,14 +106,19 @@ test.describe.serial("supabase deploy execution parity", () => {
     await page.goto(`${projectBasePath}/deploy?executionRun=${encodeURIComponent(initialExecutionRunId ?? "")}`);
     await page.waitForLoadState("networkidle");
     await expect(page.getByTestId("deploy-recheck-execution")).toBeEnabled();
-    await page.getByTestId("deploy-recheck-execution").click();
+    await Promise.all([
+      page.waitForURL((url) => isExecutionContextUrl(url, initialExecutionRunId ?? "")),
+      page.getByTestId("deploy-recheck-execution").click(),
+    ]);
     await page.waitForLoadState("networkidle");
 
     await openDeployTimeline(page);
     const recheckedCard = page
-      .locator('[data-testid="timeline-event-card"][data-event-kind="deploy_execution_rechecked"]')
+      .locator(
+        `[data-testid="timeline-event-card"][data-event-kind="deploy_execution_rechecked"][data-entity-id="${initialExecutionRunId}"]`,
+      )
       .first();
-    await expect(recheckedCard).toContainText(/Hosting execution rechecked/i);
+    await expect(recheckedCard).toContainText(deployExecutionRecheckedPattern);
     await expect(recheckedCard.getByTestId("timeline-open-context")).toHaveAttribute(
       "href",
       new RegExp(`executionRun=${initialExecutionRunId}`),
@@ -99,17 +129,25 @@ test.describe.serial("supabase deploy execution parity", () => {
     await page.getByTestId("deploy-run-execution").click();
     await page.waitForLoadState("networkidle");
     await expect(page.getByTestId("deploy-retry-execution")).toBeEnabled();
-    await page.getByTestId("deploy-retry-execution").click();
+    const executionRunIdBeforeRetry = new URL(page.url()).searchParams.get("executionRun");
+    expect(executionRunIdBeforeRetry).not.toBeNull();
+    await Promise.all([
+      page.waitForURL((url) => isNextExecutionContextUrl(url, executionRunIdBeforeRetry ?? "")),
+      page.getByTestId("deploy-retry-execution").click(),
+    ]);
     await page.waitForLoadState("networkidle");
 
     const retriedExecutionRunId = new URL(page.url()).searchParams.get("executionRun");
+    expect(retriedExecutionRunId).not.toBeNull();
     await expect(page.getByText("BUILDING").first()).toBeVisible();
 
     await openDeployTimeline(page);
     const retriedCard = page
-      .locator('[data-testid="timeline-event-card"][data-event-kind="deploy_execution_retried"]')
+      .locator(
+        `[data-testid="timeline-event-card"][data-event-kind="deploy_execution_retried"][data-entity-id="${retriedExecutionRunId}"]`,
+      )
       .first();
-    await expect(retriedCard).toContainText(/Hosting execution retried/i);
+    await expect(retriedCard).toContainText(deployExecutionRetriedPattern);
     await expect(retriedCard.getByTestId("timeline-open-context")).toHaveAttribute(
       "href",
       new RegExp(`executionRun=${retriedExecutionRunId}`),

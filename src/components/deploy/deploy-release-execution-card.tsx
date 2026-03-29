@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 
 import { Badge } from "@/components/ui/badge";
@@ -34,16 +35,18 @@ function ActionButton({
   pendingLabel,
   disabled,
   testId,
+  onClick,
 }: {
   label: string;
   pendingLabel: string;
   disabled?: boolean;
   testId?: string;
+  onClick?: () => void;
 }) {
   const { pending } = useFormStatus();
 
   return (
-    <Button type="submit" disabled={disabled || pending} data-testid={testId}>
+    <Button type="submit" disabled={disabled || pending} data-testid={testId} onClick={onClick}>
       {pending ? pendingLabel : label}
     </Button>
   );
@@ -114,6 +117,13 @@ export function DeployReleaseExecutionCard({
     initialFormState,
   );
   const [historyStatusFilter, setHistoryStatusFilter] = useState<ExecutionStatusFilter>("all");
+  const [pendingExecutionRedirect, setPendingExecutionRedirect] = useState<{
+    previousLatestExecutionRunId: string | null;
+    releaseId: string;
+  } | null>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const canPublish = bundle.projectPermissions.canPublishDeploy;
   const releaseRun = selectedRelease
     ? bundle.runs.find((run) => run.id === selectedRelease.deployRunId) ?? null
@@ -164,6 +174,60 @@ export function DeployReleaseExecutionCard({
       : selectedExecutionRun.status !== "submitted" && selectedExecutionRun.status !== "failed"
         ? dictionary.builder.deploy.executionRetryDisabled
         : null;
+
+  useEffect(() => {
+    if (state.status === "error") {
+      setPendingExecutionRedirect(null);
+      return;
+    }
+
+    const currentSearchParams = new URLSearchParams(searchParams?.toString() ?? "");
+    const currentExecutionRunId = currentSearchParams.get("executionRun");
+
+    if (currentExecutionRunId) {
+      setPendingExecutionRedirect(null);
+      return;
+    }
+
+    const latestExecutionRun = pendingExecutionRedirect
+      ? bundle.executionRuns.find((run) => run.releaseId === pendingExecutionRedirect.releaseId) ?? null
+      : selectedExecutionRun;
+
+    if (!latestExecutionRun) {
+      return;
+    }
+
+    if (
+      pendingExecutionRedirect &&
+      latestExecutionRun.releaseId !== pendingExecutionRedirect.releaseId
+    ) {
+      return;
+    }
+
+    if (
+      pendingExecutionRedirect &&
+      latestExecutionRun.id === pendingExecutionRedirect.previousLatestExecutionRunId
+    ) {
+      return;
+    }
+
+    const nextParams = new URLSearchParams(currentSearchParams.toString());
+    nextParams.set("deployRun", latestExecutionRun.deployRunId);
+    nextParams.set("release", latestExecutionRun.releaseId);
+    nextParams.set("executionRun", latestExecutionRun.id);
+    router.replace(`${pathname}?${nextParams.toString()}#execution-run-${latestExecutionRun.id}`, {
+      scroll: false,
+    });
+    setPendingExecutionRedirect(null);
+  }, [
+    bundle.executionRuns,
+    pathname,
+    pendingExecutionRedirect,
+    router,
+    searchParams,
+    selectedExecutionRun,
+    state.status,
+  ]);
 
   return (
     <Card className="px-5 py-5">
@@ -262,6 +326,12 @@ export function DeployReleaseExecutionCard({
                 pendingLabel={dictionary.builder.deploy.runningExecution}
                 disabled={!canPublish}
                 testId="deploy-run-execution"
+                onClick={() =>
+                  setPendingExecutionRedirect({
+                    previousLatestExecutionRunId: releaseExecutionRuns[0]?.id ?? null,
+                    releaseId: selectedRelease.id,
+                  })
+                }
               />
             </div>
             {state.message ? (

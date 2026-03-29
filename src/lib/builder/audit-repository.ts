@@ -39,6 +39,53 @@ function sortTimelineEvents(events: ProjectAuditTimelineEventRecord[]) {
   });
 }
 
+function normalizeTimelineTimestamp(value: string) {
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toISOString();
+}
+
+function dedupeTimelineEvents(events: ProjectAuditTimelineEventRecord[]) {
+  const seenKeys = new Set<string>();
+
+  return sortTimelineEvents(events).filter((event) => {
+    const key = [
+      event.source,
+      event.kind,
+      event.entityType,
+      event.entityId ?? "none",
+      normalizeTimelineTimestamp(event.occurredAt),
+    ].join("|");
+
+    if (seenKeys.has(key)) {
+      return false;
+    }
+
+    seenKeys.add(key);
+    return true;
+  });
+}
+
+function latestTimelineEventOccurredAt(events: ProjectAuditTimelineEventRecord[]) {
+  return dedupeTimelineEvents(events)[0]?.occurredAt ?? null;
+}
+
+type DeployExecutionFreshnessRow = {
+  id: string;
+  retryOfExecutionRunId: string | null;
+  transitionCount: number;
+  lastCheckedAt: string | null;
+  updatedAt: string;
+};
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function buildAuditEvent(
   input: CreateProjectAuditTimelineEventInput,
 ): ProjectAuditTimelineEventRecord {
@@ -881,6 +928,412 @@ async function appendMissingAuditEvents(
   return nextEvents.filter((event) => !existingIds.has(event.id));
 }
 
+async function listDerivedDeployAuditEventsSupabase(
+  context: NonNullable<Awaited<ReturnType<typeof loadTimelineContextSupabase>>>,
+) {
+  const client = createSupabaseServerClient();
+
+  if (!client) {
+    return [];
+  }
+
+  const [
+    { data: deployRunRows, error: deployRunError },
+    { data: artifactRows, error: artifactError },
+    { data: releaseRows, error: releaseError },
+    { data: handoffRunRows, error: handoffRunError },
+    { data: executionRunRows, error: executionRunError },
+  ] = await Promise.all([
+    client.from("project_deploy_runs").select("*").eq("project_id", context.project.id),
+    client.from("project_deploy_artifacts").select("*").eq("project_id", context.project.id),
+    client.from("project_deploy_releases").select("*").eq("project_id", context.project.id),
+    client.from("project_deploy_handoff_runs").select("*").eq("project_id", context.project.id),
+    client.from("project_deploy_execution_runs").select("*").eq("project_id", context.project.id),
+  ]);
+
+  if (
+    deployRunError ||
+    artifactError ||
+    releaseError ||
+    handoffRunError ||
+    executionRunError
+  ) {
+    throw new Error(
+      deployRunError?.message ??
+        artifactError?.message ??
+        releaseError?.message ??
+        handoffRunError?.message ??
+        executionRunError?.message ??
+        "Unable to load deploy timeline context.",
+    );
+  }
+
+  const runById = new Map(
+    (deployRunRows ?? []).map((row) => [String(row.id), row as Record<string, unknown>]),
+  );
+  const artifactCountByRunId = (artifactRows ?? []).reduce<Map<string, number>>((accumulator, row) => {
+    const runId = String((row as Record<string, unknown>).deploy_run_id);
+    accumulator.set(runId, (accumulator.get(runId) ?? 0) + 1);
+    return accumulator;
+  }, new Map());
+
+  const events: ProjectAuditTimelineEventRecord[] = [];
+
+  for (const row of deployRunRows ?? []) {
+    const record = row as Record<string, unknown>;
+    const runId = String(record.id);
+    const occurredAt = String(record.completed_at ?? record.started_at ?? nowIso());
+
+    events.push(
+      buildAuditEvent({
+        id: `audit-deploy-run-${runId}`,
+        projectId: context.project.id,
+        workspaceId: context.workspace.id,
+        source: "deploy",
+        kind: "deploy_run",
+        title: String(record.status) === "completed" ? "Deploy snapshot created" : "Deploy snapshot failed",
+        summary: String(record.summary ?? ""),
+        actorType: "user",
+        actorLabel: "workspace_editor",
+        entityType: "deploy_run",
+        entityId: runId,
+        linkedTab: "plan",
+        linkContext: {
+          tab: "plan",
+          deployRunId: runId,
+          generationRunId:
+            typeof record.source_generation_run_id === "string"
+              ? record.source_generation_run_id
+              : null,
+          planRevisionId:
+            typeof record.source_plan_revision_id === "string"
+              ? record.source_plan_revision_id
+              : null,
+          planRevisionNumber: Number(record.source_plan_revision_number ?? 0) || null,
+        },
+        metadata: {
+          status: record.status ?? null,
+          source: record.source ?? null,
+          trigger: record.trigger ?? null,
+          artifactCount: artifactCountByRunId.get(runId) ?? 0,
+          outputSummary:
+            typeof record.output_summary === "object" && record.output_summary
+              ? record.output_summary
+              : null,
+          runtimeSource: record.runtime_source ?? null,
+          sourceVisualRevisionNumber: record.source_visual_revision_number ?? null,
+          sourceCodeRevisionNumber: record.source_code_revision_number ?? null,
+          errorMessage: record.error_message ?? null,
+        },
+        occurredAt,
+        createdAt: occurredAt,
+      }),
+    );
+  }
+
+  for (const row of releaseRows ?? []) {
+    const record = row as Record<string, unknown>;
+    const releaseId = String(record.id);
+    const deployRunId = String(record.deploy_run_id);
+    const runRecord = runById.get(deployRunId);
+    const promotedAt = String(record.created_at ?? nowIso());
+
+    events.push(
+      buildAuditEvent({
+        id: `audit-deploy-release-${releaseId}`,
+        projectId: context.project.id,
+        workspaceId: context.workspace.id,
+        source: "deploy",
+        kind: "deploy_release_promoted",
+        title: "Deploy release promoted",
+        summary: `Release ${String(record.name)} was promoted from deploy run ${deployRunId}.`,
+        actorType: "user",
+        actorLabel: "workspace_editor",
+        entityType: "deploy_release",
+        entityId: releaseId,
+        linkedTab: "plan",
+        linkContext: {
+          tab: "plan",
+          deployRunId,
+          releaseId,
+          planRevisionId:
+            typeof record.source_plan_revision_id === "string"
+              ? record.source_plan_revision_id
+              : null,
+          planRevisionNumber: Number(record.source_plan_revision_number ?? 0) || null,
+        },
+        metadata: {
+          releaseName: record.name ?? null,
+          releaseNumber: record.release_number ?? null,
+          deployRunId,
+        },
+        occurredAt: promotedAt,
+        createdAt: promotedAt,
+      }),
+    );
+
+    if (record.handoff_prepared_at) {
+      const preparedAt = String(record.handoff_prepared_at);
+      events.push(
+        buildAuditEvent({
+          id: `audit-deploy-release-handoff-${releaseId}`,
+          projectId: context.project.id,
+          workspaceId: context.workspace.id,
+          source: "deploy",
+          kind: "deploy_release_handoff_prepared",
+          title: "Deploy release handoff prepared",
+          summary: `Release ${String(record.name)} was prepared for hosting handoff review.`,
+          actorType: "user",
+          actorLabel: "workspace_editor",
+          entityType: "deploy_release",
+          entityId: releaseId,
+          linkedTab: "plan",
+          linkContext: {
+            tab: "plan",
+            deployRunId,
+            releaseId,
+            planRevisionId:
+              typeof record.source_plan_revision_id === "string"
+                ? record.source_plan_revision_id
+                : runRecord && typeof runRecord.source_plan_revision_id === "string"
+                  ? runRecord.source_plan_revision_id
+                  : null,
+            planRevisionNumber:
+              Number(record.source_plan_revision_number ?? runRecord?.source_plan_revision_number ?? 0) ||
+              null,
+          },
+          metadata: {
+            releaseName: record.name ?? null,
+            releaseNumber: record.release_number ?? null,
+            deployRunId,
+            exportFileName: record.export_file_name ?? null,
+          },
+          occurredAt: preparedAt,
+          createdAt: preparedAt,
+        }),
+      );
+    }
+
+    if (record.exported_at) {
+      const exportedAt = String(record.exported_at);
+      events.push(
+        buildAuditEvent({
+          id: `audit-deploy-release-export-${releaseId}-${exportedAt}`,
+          projectId: context.project.id,
+          workspaceId: context.workspace.id,
+          source: "deploy",
+          kind: "deploy_release_exported",
+          title: "Deploy release export downloaded",
+          summary: `Release ${String(record.name)} was exported as a hosting handoff snapshot.`,
+          actorType: "user",
+          actorLabel: "workspace_editor",
+          entityType: "deploy_release",
+          entityId: releaseId,
+          linkedTab: "plan",
+          linkContext: {
+            tab: "plan",
+            deployRunId,
+            releaseId,
+            planRevisionId:
+              typeof record.source_plan_revision_id === "string"
+                ? record.source_plan_revision_id
+                : runRecord && typeof runRecord.source_plan_revision_id === "string"
+                  ? runRecord.source_plan_revision_id
+                  : null,
+            planRevisionNumber:
+              Number(record.source_plan_revision_number ?? runRecord?.source_plan_revision_number ?? 0) ||
+              null,
+          },
+          metadata: {
+            releaseName: record.name ?? null,
+            releaseNumber: record.release_number ?? null,
+            deployRunId,
+            exportFileName: record.export_file_name ?? null,
+          },
+          occurredAt: exportedAt,
+          createdAt: exportedAt,
+        }),
+      );
+    }
+  }
+
+  for (const row of handoffRunRows ?? []) {
+    const record = row as Record<string, unknown>;
+    const handoffRunId = String(record.id);
+    const deployRunId = String(record.deploy_run_id);
+    const runRecord = runById.get(deployRunId);
+    const occurredAt = String(record.completed_at ?? record.started_at ?? nowIso());
+
+    events.push(
+      buildAuditEvent({
+        id: `audit-deploy-handoff-run-${handoffRunId}`,
+        projectId: context.project.id,
+        workspaceId: context.workspace.id,
+        source: "deploy",
+        kind: "deploy_handoff_run",
+        title:
+          String(record.status) === "completed"
+            ? "Hosting adapter simulation completed"
+            : String(record.status) === "blocked"
+              ? "Hosting adapter simulation blocked"
+              : "Hosting adapter simulation failed",
+        summary: String(record.summary ?? ""),
+        actorType: "user",
+        actorLabel: "workspace_editor",
+        entityType: "deploy_handoff_run",
+        entityId: handoffRunId,
+        linkedTab: "plan",
+        linkContext: {
+          tab: "plan",
+          deployRunId,
+          releaseId: String(record.release_id),
+          handoffRunId,
+          planRevisionId:
+            runRecord && typeof runRecord.source_plan_revision_id === "string"
+              ? runRecord.source_plan_revision_id
+              : null,
+          planRevisionNumber:
+            Number(runRecord?.source_plan_revision_number ?? 0) || null,
+        },
+        metadata: {
+          status: record.status ?? null,
+          adapterPresetKey: record.adapter_preset_key ?? null,
+          adapterKey: record.adapter_key ?? null,
+          exportFileName: record.export_file_name ?? null,
+          primaryDomain: record.primary_domain ?? null,
+          environmentKey: record.environment_key ?? null,
+        },
+        occurredAt,
+        createdAt: occurredAt,
+      }),
+    );
+  }
+
+  for (const row of executionRunRows ?? []) {
+    const record = row as Record<string, unknown>;
+    const executionRunId = String(record.id);
+    const deployRunId = String(record.deploy_run_id);
+    const runRecord = runById.get(deployRunId);
+    const occurredAt = String(record.updated_at ?? record.created_at ?? nowIso());
+    const readinessSummary =
+      typeof record.readiness_summary_json === "object" && record.readiness_summary_json
+        ? (record.readiness_summary_json as Record<string, unknown>)
+        : {};
+    const transitionRows = Array.isArray(record.status_transitions_json)
+      ? (record.status_transitions_json as Array<Record<string, unknown>>)
+      : [];
+    const isRetry = typeof record.retry_of_execution_run_id === "string" && record.retry_of_execution_run_id.length > 0;
+
+    events.push(
+      buildAuditEvent({
+        id: `audit-deploy-execution-run-${executionRunId}`,
+        projectId: context.project.id,
+        workspaceId: context.workspace.id,
+        source: "deploy",
+        kind: isRetry ? "deploy_execution_retried" : "deploy_execution_run",
+        title: isRetry
+          ? "Hosting execution retried"
+          : String(record.status) === "ready"
+            ? "Hosting execution completed"
+            : String(record.status) === "submitted"
+              ? "Hosting execution submitted"
+              : String(record.status) === "blocked"
+                ? "Hosting execution blocked"
+                : "Hosting execution failed",
+        summary: String(record.summary ?? ""),
+        actorType: "user",
+        actorLabel: "workspace_editor",
+        entityType: "deploy_execution_run",
+        entityId: executionRunId,
+        linkedTab: "plan",
+        linkContext: {
+          tab: "plan",
+          deployRunId,
+          releaseId: String(record.release_id),
+          executionRunId,
+          planRevisionId:
+            runRecord && typeof runRecord.source_plan_revision_id === "string"
+              ? runRecord.source_plan_revision_id
+              : null,
+          planRevisionNumber:
+            Number(runRecord?.source_plan_revision_number ?? 0) || null,
+        },
+        metadata: {
+          status: record.status ?? null,
+          requestedAdapterKey: record.requested_adapter_key ?? null,
+          actualAdapterKey: record.actual_adapter_key ?? null,
+          providerKey: record.provider_key ?? null,
+          providerDeploymentId: record.provider_deployment_id ?? null,
+          hostedUrl: record.hosted_url ?? null,
+          primaryDomain: record.primary_domain ?? null,
+          environmentKey: record.environment_key ?? null,
+          blockingCount: Number(readinessSummary.blockingCount ?? 0),
+          warningCount: Number(readinessSummary.warningCount ?? 0),
+          retryOfExecutionRunId: record.retry_of_execution_run_id ?? null,
+          attemptNumber: record.attempt_number ?? null,
+          latestProviderStatus: record.latest_provider_status ?? null,
+          errorMessage: record.error_message ?? null,
+        },
+        occurredAt,
+        createdAt: occurredAt,
+      }),
+    );
+
+    if (!isRetry && transitionRows.length > 1) {
+      const previousTransition = transitionRows[transitionRows.length - 2] ?? null;
+      const recheckedAt = normalizeTimelineTimestamp(
+        String(record.last_checked_at ?? record.updated_at ?? occurredAt),
+      );
+
+      events.push(
+        buildAuditEvent({
+          id: `audit-deploy-execution-recheck-${executionRunId}-${recheckedAt}`,
+          projectId: context.project.id,
+          workspaceId: context.workspace.id,
+          source: "deploy",
+          kind: "deploy_execution_rechecked",
+          title: "Hosting execution rechecked",
+          summary: String(record.summary ?? ""),
+          actorType: "user",
+          actorLabel: "workspace_editor",
+          entityType: "deploy_execution_run",
+          entityId: executionRunId,
+          linkedTab: "plan",
+          linkContext: {
+            tab: "plan",
+            deployRunId,
+            releaseId: String(record.release_id),
+            executionRunId,
+            planRevisionId:
+              runRecord && typeof runRecord.source_plan_revision_id === "string"
+                ? runRecord.source_plan_revision_id
+                : null,
+            planRevisionNumber:
+              Number(runRecord?.source_plan_revision_number ?? 0) || null,
+          },
+          metadata: {
+            status: record.status ?? null,
+            previousStatus:
+              previousTransition && previousTransition.toStatus
+                ? previousTransition.toStatus
+                : null,
+            latestProviderStatus: record.latest_provider_status ?? null,
+            providerDeploymentId: record.provider_deployment_id ?? null,
+            hostedUrl: record.hosted_url ?? null,
+            blockingCount: Number(readinessSummary.blockingCount ?? 0),
+            warningCount: Number(readinessSummary.warningCount ?? 0),
+            errorMessage: record.error_message ?? null,
+          },
+          occurredAt: recheckedAt,
+          createdAt: recheckedAt,
+        }),
+      );
+    }
+  }
+
+  return events;
+}
+
 async function ensureBackfilledAuditEventsLocal(
   context: NonNullable<Awaited<ReturnType<typeof loadTimelineContextLocal>>>,
 ) {
@@ -934,7 +1387,7 @@ async function ensureBackfilledAuditEventsLocal(
     await appendProjectAuditEventsLocal(missingEvents);
   }
 
-  return sortTimelineEvents([...context.events, ...missingEvents]);
+  return dedupeTimelineEvents([...context.events, ...missingEvents]);
 }
 
 async function ensureBackfilledAuditEventsSupabase(
@@ -984,7 +1437,11 @@ async function ensureBackfilledAuditEventsSupabase(
       buildProposalOutcomeAuditEvents(context.workspace.id, context.project, proposal),
     ),
   ];
-  const missingEvents = await appendMissingAuditEvents(context.events, inferredEvents);
+  const deployEvents = await listDerivedDeployAuditEventsSupabase(context);
+  const missingEvents = await appendMissingAuditEvents(context.events, [
+    ...inferredEvents,
+    ...deployEvents,
+  ]);
 
   if (missingEvents.length > 0) {
     await appendProjectAuditEventsSupabase(missingEvents);
@@ -993,23 +1450,151 @@ async function ensureBackfilledAuditEventsSupabase(
   return sortTimelineEvents([...context.events, ...missingEvents]);
 }
 
+async function loadSupabaseTimelineBundleWithDeployFreshness(
+  workspaceSlug: string,
+  projectSlug: string,
+  selectedSource: AuditTimelineFilterSource,
+) {
+  const context = await loadTimelineContextSupabase(workspaceSlug, projectSlug);
+
+  if (!context) {
+    return null;
+  }
+
+  const events = await ensureBackfilledAuditEventsSupabase(context);
+
+  if (selectedSource !== "deploy") {
+    return { context, events };
+  }
+
+  const loadDeployExecutionFreshnessRows = async (
+    projectId: string,
+  ): Promise<DeployExecutionFreshnessRow[]> => {
+    const client = createSupabaseServerClient();
+
+    if (!client) {
+      return [];
+    }
+
+    const { data, error } = await client
+      .from("project_deploy_execution_runs")
+      .select("id,retry_of_execution_run_id,status_transitions_json,last_checked_at,updated_at")
+      .eq("project_id", projectId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return (data ?? []).map((row) => {
+      const record = row as Record<string, unknown>;
+      const transitionRows = Array.isArray(record.status_transitions_json)
+        ? (record.status_transitions_json as Array<unknown>)
+        : [];
+
+      return {
+        id: String(record.id),
+        retryOfExecutionRunId:
+          typeof record.retry_of_execution_run_id === "string" ? record.retry_of_execution_run_id : null,
+        transitionCount: transitionRows.length,
+        lastCheckedAt:
+          typeof record.last_checked_at === "string" ? record.last_checked_at : null,
+        updatedAt: String(record.updated_at ?? nowIso()),
+      };
+    });
+  };
+
+  const listMissingRecheckedExecutionIds = async (
+    projectId: string,
+    candidateEvents: ProjectAuditTimelineEventRecord[],
+  ) => {
+    const executionRows = await loadDeployExecutionFreshnessRows(projectId);
+    const recheckedEntityIds = new Set(
+      candidateEvents
+        .filter((event) => event.kind === "deploy_execution_rechecked" && event.entityId)
+        .map((event) => event.entityId as string),
+    );
+
+    return executionRows
+      .filter((row) => !row.retryOfExecutionRunId)
+      .filter((row) => row.transitionCount > 1 || row.lastCheckedAt !== null)
+      .filter((row) => !recheckedEntityIds.has(row.id))
+      .map((row) => row.id);
+  };
+
+  let bestBundle = { context, events };
+  let bestLatestEvent = latestTimelineEventOccurredAt(events);
+  let bestMissingRechecks = await listMissingRecheckedExecutionIds(context.project.id, events);
+
+  if (bestMissingRechecks.length === 0) {
+    return bestBundle;
+  }
+
+  for (const waitMs of [450, 900, 1800, 3600]) {
+    await delay(waitMs);
+
+    const refreshedContext = await loadTimelineContextSupabase(workspaceSlug, projectSlug);
+
+    if (!refreshedContext) {
+      continue;
+    }
+
+    const refreshedEvents = await ensureBackfilledAuditEventsSupabase(refreshedContext);
+    const latestRefreshedEvent = latestTimelineEventOccurredAt(refreshedEvents);
+    const refreshedMissingRechecks = await listMissingRecheckedExecutionIds(
+      refreshedContext.project.id,
+      refreshedEvents,
+    );
+
+    if (
+      refreshedMissingRechecks.length < bestMissingRechecks.length ||
+      (refreshedMissingRechecks.length === bestMissingRechecks.length &&
+        latestRefreshedEvent &&
+        (!bestLatestEvent ||
+          latestRefreshedEvent > bestLatestEvent ||
+          (latestRefreshedEvent === bestLatestEvent &&
+            refreshedEvents.length > bestBundle.events.length)))
+    ) {
+      bestBundle = {
+        context: refreshedContext,
+        events: refreshedEvents,
+      };
+      bestLatestEvent = latestRefreshedEvent;
+      bestMissingRechecks = refreshedMissingRechecks;
+    }
+
+    if (bestMissingRechecks.length === 0) {
+      break;
+    }
+  }
+
+  return bestBundle;
+}
+
 export async function getProjectAuditTimeline(
   workspaceSlug: string,
   projectSlug: string,
   sourceFilter: string | null | undefined,
 ): Promise<ProjectAuditTimelineBundle | null> {
   const selectedSource = normalizeTimelineSource(sourceFilter);
-  const context = isSupabaseConfigured()
-    ? await loadTimelineContextSupabase(workspaceSlug, projectSlug)
-    : await loadTimelineContextLocal(workspaceSlug, projectSlug);
+  const supabaseBundle = isSupabaseConfigured()
+    ? await loadSupabaseTimelineBundleWithDeployFreshness(
+        workspaceSlug,
+        projectSlug,
+        selectedSource,
+      )
+    : null;
+  const localContext = !isSupabaseConfigured()
+    ? await loadTimelineContextLocal(workspaceSlug, projectSlug)
+    : null;
+  const context = supabaseBundle?.context ?? localContext;
 
   if (!context) {
     return null;
   }
 
-  const events = isSupabaseConfigured()
-    ? await ensureBackfilledAuditEventsSupabase(context)
-    : await ensureBackfilledAuditEventsLocal(context);
+  const events =
+    supabaseBundle?.events ??
+    (localContext ? dedupeTimelineEvents(await ensureBackfilledAuditEventsLocal(localContext)) : []);
   const filteredEvents =
     selectedSource === "all"
       ? events

@@ -10,10 +10,20 @@ export function createSupabaseServerClient() {
     return null;
   }
 
+  const noStoreFetch: typeof fetch = (input, init) =>
+    fetch(input, {
+      ...init,
+      cache: "no-store",
+      next: { revalidate: 0, ...(init?.next ?? {}) },
+    });
+
   return createClient(url, serviceRoleKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
+    },
+    global: {
+      fetch: noStoreFetch,
     },
   });
 }

@@ -39,6 +39,14 @@ function sortTimelineEvents(events: ProjectAuditTimelineEventRecord[]) {
   });
 }
 
+function latestTimelineEventOccurredAt(events: ProjectAuditTimelineEventRecord[]) {
+  return sortTimelineEvents(events)[0]?.occurredAt ?? null;
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function buildAuditEvent(
   input: CreateProjectAuditTimelineEventInput,
 ): ProjectAuditTimelineEventRecord {
@@ -1393,13 +1401,51 @@ async function ensureBackfilledAuditEventsSupabase(
     ...inferredEvents,
     ...deployEvents,
   ]);
-  const persistableEvents = missingEvents.filter((event) => event.source !== "deploy");
 
-  if (persistableEvents.length > 0) {
-    await appendProjectAuditEventsSupabase(persistableEvents);
+  if (missingEvents.length > 0) {
+    await appendProjectAuditEventsSupabase(missingEvents);
   }
 
   return sortTimelineEvents([...context.events, ...missingEvents]);
+}
+
+async function loadSupabaseTimelineBundleWithDeployFreshness(
+  workspaceSlug: string,
+  projectSlug: string,
+  selectedSource: AuditTimelineFilterSource,
+) {
+  const context = await loadTimelineContextSupabase(workspaceSlug, projectSlug);
+
+  if (!context) {
+    return null;
+  }
+
+  const events = await ensureBackfilledAuditEventsSupabase(context);
+
+  if (selectedSource !== "deploy") {
+    return { context, events };
+  }
+
+  await delay(350);
+
+  const refreshedContext = await loadTimelineContextSupabase(workspaceSlug, projectSlug);
+
+  if (!refreshedContext) {
+    return { context, events };
+  }
+
+  const refreshedEvents = await ensureBackfilledAuditEventsSupabase(refreshedContext);
+  const latestOriginalEvent = latestTimelineEventOccurredAt(events);
+  const latestRefreshedEvent = latestTimelineEventOccurredAt(refreshedEvents);
+
+  if (latestRefreshedEvent && (!latestOriginalEvent || latestRefreshedEvent > latestOriginalEvent)) {
+    return {
+      context: refreshedContext,
+      events: refreshedEvents,
+    };
+  }
+
+  return { context, events };
 }
 
 export async function getProjectAuditTimeline(
@@ -1408,17 +1454,25 @@ export async function getProjectAuditTimeline(
   sourceFilter: string | null | undefined,
 ): Promise<ProjectAuditTimelineBundle | null> {
   const selectedSource = normalizeTimelineSource(sourceFilter);
-  const context = isSupabaseConfigured()
-    ? await loadTimelineContextSupabase(workspaceSlug, projectSlug)
-    : await loadTimelineContextLocal(workspaceSlug, projectSlug);
+  const supabaseBundle = isSupabaseConfigured()
+    ? await loadSupabaseTimelineBundleWithDeployFreshness(
+        workspaceSlug,
+        projectSlug,
+        selectedSource,
+      )
+    : null;
+  const localContext = !isSupabaseConfigured()
+    ? await loadTimelineContextLocal(workspaceSlug, projectSlug)
+    : null;
+  const context = supabaseBundle?.context ?? localContext;
 
   if (!context) {
     return null;
   }
 
-  const events = isSupabaseConfigured()
-    ? await ensureBackfilledAuditEventsSupabase(context)
-    : await ensureBackfilledAuditEventsLocal(context);
+  const events =
+    supabaseBundle?.events ??
+    (localContext ? await ensureBackfilledAuditEventsLocal(localContext) : []);
   const filteredEvents =
     selectedSource === "all"
       ? events

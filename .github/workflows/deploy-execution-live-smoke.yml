@@ -12,6 +12,7 @@ jobs:
       BESA_E2E_DEPLOY_MODE: live
       BESA_E2E_OUTPUT_DIR: .artifacts/deploy-execution-live-smoke/test-results
       BESA_E2E_HTML_REPORT_DIR: .artifacts/deploy-execution-live-smoke/playwright-report
+      BESA_E2E_JSON_REPORT_PATH: .artifacts/deploy-execution-live-smoke/test-results/playwright-results.json
       BESA_E2E_LOG_DIR: .artifacts/deploy-execution-live-smoke/logs
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       BESA_E2E_LIVE_DEPLOY_PROJECT_NAME: ${{ secrets.BESA_E2E_LIVE_DEPLOY_PROJECT_NAME }}
@@ -69,6 +70,7 @@ jobs:
         if: always()
         env:
           BESA_CI_JOB_LABEL: Deploy execution (live smoke)
+          BESA_CI_JOB_VARIANT: hosted-live-smoke
           BESA_CI_JOB_STATUS: ${{ job.status }}
           BESA_CI_SECRET_GATED: "1"
           BESA_CI_VERIFICATION_COMMAND: npm run verify:deploy-execution:live-smoke
@@ -81,4 +83,5 @@ jobs:
           BESA_CI_REPORT_PATH: .artifacts/deploy-execution-live-smoke/playwright-report
           BESA_CI_TEST_RESULTS_PATH: .artifacts/deploy-execution-live-smoke/test-results
           BESA_CI_LOG_PATH: .artifacts/deploy-execution-live-smoke/logs
+          BESA_CI_JSON_REPORT_PATH: .artifacts/deploy-execution-live-smoke/test-results/playwright-results.json
         run: node scripts/write-deploy-e2e-summary.mjs

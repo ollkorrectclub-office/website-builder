@@ -1,4 +1,4 @@
-import { appendFile } from "node:fs/promises";
+import { appendFile, readFile } from "node:fs/promises";
 
 function value(key) {
   return process.env[key]?.trim() ?? "";
@@ -24,6 +24,7 @@ if (!summaryPath) {
 }
 
 const jobLabel = value("BESA_CI_JOB_LABEL") || "Deploy execution verification";
+const jobVariant = value("BESA_CI_JOB_VARIANT");
 const verificationCommand = value("BESA_CI_VERIFICATION_COMMAND") || "n/a";
 const jobStatus = value("BESA_CI_JOB_STATUS") || "unknown";
 const secretGated = value("BESA_CI_SECRET_GATED") === "1";
@@ -42,17 +43,134 @@ const logsArtifact = formatLink(
 const reportPath = value("BESA_CI_REPORT_PATH");
 const resultsPath = value("BESA_CI_TEST_RESULTS_PATH");
 const logsPath = value("BESA_CI_LOG_PATH");
+const jsonReportPath = value("BESA_CI_JSON_REPORT_PATH");
+
+function statusLabel(status) {
+  switch (status) {
+    case "success":
+      return "PASSED";
+    case "failure":
+      return "FAILED";
+    case "cancelled":
+      return "CANCELLED";
+    default:
+      return status.toUpperCase();
+  }
+}
+
+function fallbackCounts() {
+  return {
+    passed: 0,
+    failed: 0,
+    skipped: 0,
+    flaky: 0,
+  };
+}
+
+function summarizeFromSuites(suites) {
+  const counts = fallbackCounts();
+  const stack = [...suites];
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+
+    if (!current) {
+      continue;
+    }
+
+    if (Array.isArray(current.suites)) {
+      stack.push(...current.suites);
+    }
+
+    if (!Array.isArray(current.specs)) {
+      continue;
+    }
+
+    for (const spec of current.specs) {
+      for (const test of spec.tests ?? []) {
+        const results = Array.isArray(test.results) ? test.results : [];
+        const finalResult = [...results].reverse().find((entry) => typeof entry?.status === "string");
+        const status = finalResult?.status ?? "unknown";
+
+        switch (status) {
+          case "passed":
+            counts.passed += 1;
+            break;
+          case "skipped":
+            counts.skipped += 1;
+            break;
+          case "flaky":
+            counts.flaky += 1;
+            break;
+          default:
+            counts.failed += 1;
+            break;
+        }
+      }
+    }
+  }
+
+  return counts;
+}
+
+async function readPlaywrightCounts(path) {
+  if (!path) {
+    return null;
+  }
+
+  try {
+    const report = JSON.parse(await readFile(path, "utf8"));
+
+    if (report?.stats) {
+      return {
+        passed: Number(report.stats.expected ?? 0),
+        failed: Number(report.stats.unexpected ?? 0),
+        skipped: Number(report.stats.skipped ?? 0),
+        flaky: Number(report.stats.flaky ?? 0),
+      };
+    }
+
+    if (Array.isArray(report?.suites)) {
+      return summarizeFromSuites(report.suites);
+    }
+  } catch (error) {
+    return {
+      ...fallbackCounts(),
+      readError: error instanceof Error ? error.message : "Unable to parse Playwright JSON report.",
+    };
+  }
+
+  return fallbackCounts();
+}
+
+const counts = await readPlaywrightCounts(jsonReportPath);
+const summaryLabel = counts
+  ? `${counts.passed} passed, ${counts.failed} failed, ${counts.skipped} skipped, ${counts.flaky} flaky`
+  : "_unavailable_";
 
 const lines = [
   `## ${jobLabel}`,
   "",
-  `- Job status: \`${jobStatus}\``,
+  `- Result: **${statusLabel(jobStatus)}**`,
+];
+
+if (jobVariant) {
+  lines.push(`- Workflow variant: \`${jobVariant}\``);
+}
+
+lines.push(
+  `- Raw job status: \`${jobStatus}\``,
   `- Verification command: \`${verificationCommand}\``,
+  `- Test summary: **${summaryLabel}**`,
   `- Secret-gated job: ${secretGated ? "yes" : "no"}`,
   `- Playwright report artifact: ${reportArtifact}`,
   `- Test-results artifact: ${resultsArtifact}`,
   `- Wrapper/server logs artifact: ${logsArtifact}`,
-];
+);
+
+if (counts?.readError) {
+  lines.push(`- JSON summary parse note: ${counts.readError}`);
+}
 
 if (reportPath || resultsPath || logsPath) {
   lines.push("", "Artifact paths inside the job workspace:");
@@ -67,6 +185,10 @@ if (reportPath || resultsPath || logsPath) {
 
   if (logsPath) {
     lines.push(`- Wrapper/server logs path: \`${logsPath}\``);
+  }
+
+  if (jsonReportPath) {
+    lines.push(`- Playwright JSON report path: \`${jsonReportPath}\``);
   }
 }
 

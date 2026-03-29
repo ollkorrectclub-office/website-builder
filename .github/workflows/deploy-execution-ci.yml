@@ -21,8 +21,8 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       BESA_E2E_SUPABASE_OWNER_EMAIL: ${{ secrets.BESA_E2E_SUPABASE_OWNER_EMAIL }}
       BESA_E2E_SUPABASE_OWNER_PASSWORD: ${{ secrets.BESA_E2E_SUPABASE_OWNER_PASSWORD }}
-      BESA_E2E_SUPABASE_WORKSPACE_SLUG: ${{ secrets.BESA_E2E_SUPABASE_WORKSPACE_SLUG }}
-      BESA_E2E_SUPABASE_PROJECT_SLUG: ${{ secrets.BESA_E2E_SUPABASE_PROJECT_SLUG }}
+      BESA_E2E_SUPABASE_DEPLOY_WORKSPACE_SLUG: ${{ secrets.BESA_E2E_SUPABASE_DEPLOY_WORKSPACE_SLUG }}
+      BESA_E2E_SUPABASE_DEPLOY_PROJECT_SLUG: ${{ secrets.BESA_E2E_SUPABASE_DEPLOY_PROJECT_SLUG }}
     steps:
       - name: Resolve optional deploy execution jobs
         id: resolve
@@ -36,7 +36,7 @@ jobs:
               live_smoke_enabled=true
             fi
 
-            if [[ -n "${NEXT_PUBLIC_SUPABASE_URL}" && -n "${SUPABASE_SERVICE_ROLE_KEY}" && -n "${BESA_E2E_SUPABASE_OWNER_EMAIL}" && -n "${BESA_E2E_SUPABASE_OWNER_PASSWORD}" && -n "${BESA_E2E_SUPABASE_WORKSPACE_SLUG}" && -n "${BESA_E2E_SUPABASE_PROJECT_SLUG}" ]]; then
+            if [[ -n "${NEXT_PUBLIC_SUPABASE_URL}" && -n "${SUPABASE_SERVICE_ROLE_KEY}" && -n "${BESA_E2E_SUPABASE_OWNER_EMAIL}" && -n "${BESA_E2E_SUPABASE_OWNER_PASSWORD}" && -n "${BESA_E2E_SUPABASE_DEPLOY_WORKSPACE_SLUG}" && -n "${BESA_E2E_SUPABASE_DEPLOY_PROJECT_SLUG}" ]]; then
               supabase_parity_enabled=true
             fi
           fi
@@ -50,6 +50,7 @@ jobs:
     env:
       BESA_E2E_OUTPUT_DIR: .artifacts/deploy-execution-local-stub/test-results
       BESA_E2E_HTML_REPORT_DIR: .artifacts/deploy-execution-local-stub/playwright-report
+      BESA_E2E_JSON_REPORT_PATH: .artifacts/deploy-execution-local-stub/test-results/playwright-results.json
       BESA_E2E_LOG_DIR: .artifacts/deploy-execution-local-stub/logs
     steps:
       - name: Checkout
@@ -101,6 +102,7 @@ jobs:
         if: always()
         env:
           BESA_CI_JOB_LABEL: Deploy execution (local stub)
+          BESA_CI_JOB_VARIANT: local-stub
           BESA_CI_JOB_STATUS: ${{ job.status }}
           BESA_CI_SECRET_GATED: "0"
           BESA_CI_VERIFICATION_COMMAND: npm run verify:deploy-execution
@@ -113,6 +115,7 @@ jobs:
           BESA_CI_REPORT_PATH: .artifacts/deploy-execution-local-stub/playwright-report
           BESA_CI_TEST_RESULTS_PATH: .artifacts/deploy-execution-local-stub/test-results
           BESA_CI_LOG_PATH: .artifacts/deploy-execution-local-stub/logs
+          BESA_CI_JSON_REPORT_PATH: .artifacts/deploy-execution-local-stub/test-results/playwright-results.json
         run: node scripts/write-deploy-e2e-summary.mjs
 
   deploy-execution-live-smoke:
@@ -127,6 +130,7 @@ jobs:
       BESA_E2E_DEPLOY_MODE: live
       BESA_E2E_OUTPUT_DIR: .artifacts/deploy-execution-live-smoke/test-results
       BESA_E2E_HTML_REPORT_DIR: .artifacts/deploy-execution-live-smoke/playwright-report
+      BESA_E2E_JSON_REPORT_PATH: .artifacts/deploy-execution-live-smoke/test-results/playwright-results.json
       BESA_E2E_LOG_DIR: .artifacts/deploy-execution-live-smoke/logs
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       BESA_E2E_LIVE_DEPLOY_PROJECT_NAME: ${{ secrets.BESA_E2E_LIVE_DEPLOY_PROJECT_NAME }}
@@ -184,6 +188,7 @@ jobs:
         if: always()
         env:
           BESA_CI_JOB_LABEL: Deploy execution optional live smoke
+          BESA_CI_JOB_VARIANT: hosted-live-smoke
           BESA_CI_JOB_STATUS: ${{ job.status }}
           BESA_CI_SECRET_GATED: "1"
           BESA_CI_VERIFICATION_COMMAND: npm run verify:deploy-execution:live-smoke
@@ -196,6 +201,7 @@ jobs:
           BESA_CI_REPORT_PATH: .artifacts/deploy-execution-live-smoke/playwright-report
           BESA_CI_TEST_RESULTS_PATH: .artifacts/deploy-execution-live-smoke/test-results
           BESA_CI_LOG_PATH: .artifacts/deploy-execution-live-smoke/logs
+          BESA_CI_JSON_REPORT_PATH: .artifacts/deploy-execution-live-smoke/test-results/playwright-results.json
         run: node scripts/write-deploy-e2e-summary.mjs
 
   deploy-execution-supabase-parity:
@@ -208,13 +214,14 @@ jobs:
     env:
       BESA_E2E_OUTPUT_DIR: .artifacts/deploy-execution-supabase-parity/test-results
       BESA_E2E_HTML_REPORT_DIR: .artifacts/deploy-execution-supabase-parity/playwright-report
+      BESA_E2E_JSON_REPORT_PATH: .artifacts/deploy-execution-supabase-parity/test-results/playwright-results.json
       BESA_E2E_LOG_DIR: .artifacts/deploy-execution-supabase-parity/logs
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       BESA_E2E_SUPABASE_OWNER_EMAIL: ${{ secrets.BESA_E2E_SUPABASE_OWNER_EMAIL }}
       BESA_E2E_SUPABASE_OWNER_PASSWORD: ${{ secrets.BESA_E2E_SUPABASE_OWNER_PASSWORD }}
-      BESA_E2E_SUPABASE_WORKSPACE_SLUG: ${{ secrets.BESA_E2E_SUPABASE_WORKSPACE_SLUG }}
-      BESA_E2E_SUPABASE_PROJECT_SLUG: ${{ secrets.BESA_E2E_SUPABASE_PROJECT_SLUG }}
+      BESA_E2E_SUPABASE_DEPLOY_WORKSPACE_SLUG: ${{ secrets.BESA_E2E_SUPABASE_DEPLOY_WORKSPACE_SLUG }}
+      BESA_E2E_SUPABASE_DEPLOY_PROJECT_SLUG: ${{ secrets.BESA_E2E_SUPABASE_DEPLOY_PROJECT_SLUG }}
       BESA_E2E_SUPABASE_LOCALE: ${{ secrets.BESA_E2E_SUPABASE_LOCALE }}
     steps:
       - name: Checkout
@@ -266,6 +273,7 @@ jobs:
         if: always()
         env:
           BESA_CI_JOB_LABEL: Deploy execution optional Supabase parity
+          BESA_CI_JOB_VARIANT: supabase-parity
           BESA_CI_JOB_STATUS: ${{ job.status }}
           BESA_CI_SECRET_GATED: "1"
           BESA_CI_VERIFICATION_COMMAND: npm run verify:deploy-execution:supabase
@@ -278,4 +286,5 @@ jobs:
           BESA_CI_REPORT_PATH: .artifacts/deploy-execution-supabase-parity/playwright-report
           BESA_CI_TEST_RESULTS_PATH: .artifacts/deploy-execution-supabase-parity/test-results
           BESA_CI_LOG_PATH: .artifacts/deploy-execution-supabase-parity/logs
+          BESA_CI_JSON_REPORT_PATH: .artifacts/deploy-execution-supabase-parity/test-results/playwright-results.json
         run: node scripts/write-deploy-e2e-summary.mjs

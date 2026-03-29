@@ -39,8 +39,39 @@ function sortTimelineEvents(events: ProjectAuditTimelineEventRecord[]) {
   });
 }
 
+function normalizeTimelineTimestamp(value: string) {
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toISOString();
+}
+
+function dedupeTimelineEvents(events: ProjectAuditTimelineEventRecord[]) {
+  const seenKeys = new Set<string>();
+
+  return sortTimelineEvents(events).filter((event) => {
+    const key = [
+      event.source,
+      event.kind,
+      event.entityType,
+      event.entityId ?? "none",
+      normalizeTimelineTimestamp(event.occurredAt),
+    ].join("|");
+
+    if (seenKeys.has(key)) {
+      return false;
+    }
+
+    seenKeys.add(key);
+    return true;
+  });
+}
+
 function latestTimelineEventOccurredAt(events: ProjectAuditTimelineEventRecord[]) {
-  return sortTimelineEvents(events)[0]?.occurredAt ?? null;
+  return dedupeTimelineEvents(events)[0]?.occurredAt ?? null;
 }
 
 function delay(ms: number) {
@@ -1242,7 +1273,9 @@ async function listDerivedDeployAuditEventsSupabase(
 
     if (!isRetry && transitionRows.length > 1) {
       const previousTransition = transitionRows[transitionRows.length - 2] ?? null;
-      const recheckedAt = String(record.last_checked_at ?? record.updated_at ?? occurredAt);
+      const recheckedAt = normalizeTimelineTimestamp(
+        String(record.last_checked_at ?? record.updated_at ?? occurredAt),
+      );
 
       events.push(
         buildAuditEvent({
@@ -1346,7 +1379,7 @@ async function ensureBackfilledAuditEventsLocal(
     await appendProjectAuditEventsLocal(missingEvents);
   }
 
-  return sortTimelineEvents([...context.events, ...missingEvents]);
+  return dedupeTimelineEvents([...context.events, ...missingEvents]);
 }
 
 async function ensureBackfilledAuditEventsSupabase(
@@ -1426,26 +1459,37 @@ async function loadSupabaseTimelineBundleWithDeployFreshness(
     return { context, events };
   }
 
-  await delay(350);
+  let bestBundle = { context, events };
+  let bestLatestEvent = latestTimelineEventOccurredAt(events);
 
-  const refreshedContext = await loadTimelineContextSupabase(workspaceSlug, projectSlug);
+  for (const waitMs of [450, 900]) {
+    await delay(waitMs);
 
-  if (!refreshedContext) {
-    return { context, events };
+    const refreshedContext = await loadTimelineContextSupabase(workspaceSlug, projectSlug);
+
+    if (!refreshedContext) {
+      continue;
+    }
+
+    const refreshedEvents = await ensureBackfilledAuditEventsSupabase(refreshedContext);
+    const latestRefreshedEvent = latestTimelineEventOccurredAt(refreshedEvents);
+
+    if (
+      latestRefreshedEvent &&
+      (!bestLatestEvent ||
+        latestRefreshedEvent > bestLatestEvent ||
+        (latestRefreshedEvent === bestLatestEvent &&
+          refreshedEvents.length > bestBundle.events.length))
+    ) {
+      bestBundle = {
+        context: refreshedContext,
+        events: refreshedEvents,
+      };
+      bestLatestEvent = latestRefreshedEvent;
+    }
   }
 
-  const refreshedEvents = await ensureBackfilledAuditEventsSupabase(refreshedContext);
-  const latestOriginalEvent = latestTimelineEventOccurredAt(events);
-  const latestRefreshedEvent = latestTimelineEventOccurredAt(refreshedEvents);
-
-  if (latestRefreshedEvent && (!latestOriginalEvent || latestRefreshedEvent > latestOriginalEvent)) {
-    return {
-      context: refreshedContext,
-      events: refreshedEvents,
-    };
-  }
-
-  return { context, events };
+  return bestBundle;
 }
 
 export async function getProjectAuditTimeline(
@@ -1472,7 +1516,7 @@ export async function getProjectAuditTimeline(
 
   const events =
     supabaseBundle?.events ??
-    (localContext ? await ensureBackfilledAuditEventsLocal(localContext) : []);
+    (localContext ? dedupeTimelineEvents(await ensureBackfilledAuditEventsLocal(localContext)) : []);
   const filteredEvents =
     selectedSource === "all"
       ? events

@@ -64,6 +64,15 @@ function isExecutionContextUrl(url: URL, executionRunId: string) {
   );
 }
 
+function isNextExecutionContextUrl(url: URL, previousExecutionRunId: string) {
+  return (
+    url.pathname === `${projectBasePath}/deploy` &&
+    url.searchParams.get("executionRun") !== previousExecutionRunId &&
+    url.searchParams.has("deployRun") &&
+    url.searchParams.has("release")
+  );
+}
+
 test.describe.serial("supabase deploy execution parity", () => {
   test.skip(!isSupabaseE2EMode(), "This suite only runs when Supabase deploy parity mode is enabled.");
 
@@ -120,14 +129,10 @@ test.describe.serial("supabase deploy execution parity", () => {
     await page.getByTestId("deploy-run-execution").click();
     await page.waitForLoadState("networkidle");
     await expect(page.getByTestId("deploy-retry-execution")).toBeEnabled();
+    const executionRunIdBeforeRetry = new URL(page.url()).searchParams.get("executionRun");
+    expect(executionRunIdBeforeRetry).not.toBeNull();
     await Promise.all([
-      page.waitForURL(
-        (url) =>
-          url.pathname === `${projectBasePath}/deploy` &&
-          url.searchParams.get("executionRun") !== initialExecutionRunId &&
-          url.searchParams.has("deployRun") &&
-          url.searchParams.has("release"),
-      ),
+      page.waitForURL((url) => isNextExecutionContextUrl(url, executionRunIdBeforeRetry ?? "")),
       page.getByTestId("deploy-retry-execution").click(),
     ]);
     await page.waitForLoadState("networkidle");

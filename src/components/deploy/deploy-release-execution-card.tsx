@@ -176,10 +176,6 @@ export function DeployReleaseExecutionCard({
         : null;
 
   useEffect(() => {
-    if (!pendingExecutionRedirect) {
-      return;
-    }
-
     if (state.status === "error") {
       setPendingExecutionRedirect(null);
       return;
@@ -193,14 +189,25 @@ export function DeployReleaseExecutionCard({
       return;
     }
 
-    const latestExecutionRun =
-      bundle.executionRuns.find((run) => run.releaseId === pendingExecutionRedirect.releaseId) ?? null;
+    const latestExecutionRun = pendingExecutionRedirect
+      ? bundle.executionRuns.find((run) => run.releaseId === pendingExecutionRedirect.releaseId) ?? null
+      : selectedExecutionRun;
 
-    if (!latestExecutionRun || latestExecutionRun.releaseId !== pendingExecutionRedirect.releaseId) {
+    if (!latestExecutionRun) {
       return;
     }
 
-    if (latestExecutionRun.id === pendingExecutionRedirect.previousLatestExecutionRunId) {
+    if (
+      pendingExecutionRedirect &&
+      latestExecutionRun.releaseId !== pendingExecutionRedirect.releaseId
+    ) {
+      return;
+    }
+
+    if (
+      pendingExecutionRedirect &&
+      latestExecutionRun.id === pendingExecutionRedirect.previousLatestExecutionRunId
+    ) {
       return;
     }
 
@@ -212,7 +219,15 @@ export function DeployReleaseExecutionCard({
       scroll: false,
     });
     setPendingExecutionRedirect(null);
-  }, [bundle.executionRuns, pathname, pendingExecutionRedirect, router, searchParams, state.status]);
+  }, [
+    bundle.executionRuns,
+    pathname,
+    pendingExecutionRedirect,
+    router,
+    searchParams,
+    selectedExecutionRun,
+    state.status,
+  ]);
 
   return (
     <Card className="px-5 py-5">

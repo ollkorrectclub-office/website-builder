@@ -71,10 +71,13 @@ test.describe.serial("supabase deploy execution parity", () => {
     await expect(page).toHaveURL(/executionRun=/);
     await expect(page.getByText("BUILDING").first()).toBeVisible();
     const initialExecutionRunId = new URL(page.url()).searchParams.get("executionRun");
+    expect(initialExecutionRunId).not.toBeNull();
 
     await openDeployTimeline(page);
     const executionCard = page
-      .locator('[data-testid="timeline-event-card"][data-event-kind="deploy_execution_run"]')
+      .locator(
+        `[data-testid="timeline-event-card"][data-event-kind="deploy_execution_run"][data-entity-id="${initialExecutionRunId}"]`,
+      )
       .first();
     await expect(executionCard).toContainText(/Hosting execution/i);
     await expect(executionCard.getByTestId("timeline-open-context")).toHaveAttribute(
@@ -90,7 +93,9 @@ test.describe.serial("supabase deploy execution parity", () => {
 
     await openDeployTimeline(page);
     const recheckedCard = page
-      .locator('[data-testid="timeline-event-card"][data-event-kind="deploy_execution_rechecked"]')
+      .locator(
+        `[data-testid="timeline-event-card"][data-event-kind="deploy_execution_rechecked"][data-entity-id="${initialExecutionRunId}"]`,
+      )
       .first();
     await expect(recheckedCard).toContainText(deployExecutionRecheckedPattern);
     await expect(recheckedCard.getByTestId("timeline-open-context")).toHaveAttribute(
@@ -107,11 +112,14 @@ test.describe.serial("supabase deploy execution parity", () => {
     await page.waitForLoadState("networkidle");
 
     const retriedExecutionRunId = new URL(page.url()).searchParams.get("executionRun");
+    expect(retriedExecutionRunId).not.toBeNull();
     await expect(page.getByText("BUILDING").first()).toBeVisible();
 
     await openDeployTimeline(page);
     const retriedCard = page
-      .locator('[data-testid="timeline-event-card"][data-event-kind="deploy_execution_retried"]')
+      .locator(
+        `[data-testid="timeline-event-card"][data-event-kind="deploy_execution_retried"][data-entity-id="${retriedExecutionRunId}"]`,
+      )
       .first();
     await expect(retriedCard).toContainText(deployExecutionRetriedPattern);
     await expect(retriedCard.getByTestId("timeline-open-context")).toHaveAttribute(

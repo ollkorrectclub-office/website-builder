@@ -6,6 +6,7 @@ import {
   isLiveProviderE2EMode,
   isSupabaseE2EMode,
 } from "./support/env";
+import { recordProofCheck, resetProofSummary } from "./support/proof-summary";
 import { resetProviderVerificationStore } from "./support/store";
 
 const projectBasePath = e2eProjectBasePath;
@@ -25,6 +26,10 @@ test.describe.serial("live provider smoke verification", () => {
     isSupabaseE2EMode() || !isLiveProviderE2EMode(),
     "The live provider smoke suite runs only when BESA_E2E_PROVIDER_MODE=live is enabled.",
   );
+
+  test.beforeAll(async () => {
+    await resetProofSummary();
+  });
 
   test.beforeEach(async () => {
     await resetProviderVerificationStore();
@@ -52,5 +57,21 @@ test.describe.serial("live provider smoke verification", () => {
     await page.goto(`${projectBasePath}/code`);
     await page.waitForLoadState("networkidle");
     await expect(page.getByTestId("code-provider-run-history-item").first()).toBeVisible();
+
+    await recordProofCheck(
+      "shapeCheck",
+      "passed",
+      "Live provider smoke recorded completed planning, generation, and patch verification runs in history.",
+    );
+    await recordProofCheck(
+      "fallbackCheck",
+      "not_applicable",
+      "The live provider smoke workflow verifies the hosted success path only.",
+    );
+    await recordProofCheck(
+      "nonDestructiveCheck",
+      "not_applicable",
+      "Provider verification checks capability health and does not mutate project content.",
+    );
   });
 });

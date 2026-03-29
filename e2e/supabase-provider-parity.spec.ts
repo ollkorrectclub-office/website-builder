@@ -10,6 +10,7 @@ import {
   isLiveProviderE2EMode,
   isSupabaseE2EMode,
 } from "./support/env";
+import { recordProofCheck, resetProofSummary } from "./support/proof-summary";
 
 const workspacePath = `/${e2eLocale}/app/workspaces`;
 const projectBasePath = e2eProjectBasePath;
@@ -57,6 +58,10 @@ test.describe.serial("supabase provider parity", () => {
     "This suite only runs in Supabase mode with the local provider stub path.",
   );
 
+  test.beforeAll(async () => {
+    await resetProofSummary();
+  });
+
   test("verifies planning, generation, and patch provider failure/retry flows", async ({ page }) => {
     await login(page);
 
@@ -100,5 +105,21 @@ test.describe.serial("supabase provider parity", () => {
     await page.getByTestId("code-provider-run-history-filter-linked-entity").selectOption("unlinked");
     await expect(page.getByTestId("code-provider-run-history-item").first()).toContainText("Attempt 2");
     await expect(page.getByTestId("code-provider-run-history-item").first()).toContainText("external_patch_adapter_v1");
+
+    await recordProofCheck(
+      "shapeCheck",
+      "passed",
+      "Supabase provider parity preserved the expected planner, generation, and patch verification history shape.",
+    );
+    await recordProofCheck(
+      "fallbackCheck",
+      "passed",
+      "Supabase provider parity proved missing-env failure handling and successful retry paths across all three capabilities.",
+    );
+    await recordProofCheck(
+      "nonDestructiveCheck",
+      "not_applicable",
+      "Provider verification parity checks adapter execution and history without mutating project content.",
+    );
   });
 });

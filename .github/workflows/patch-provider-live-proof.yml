@@ -76,4 +76,5 @@ jobs:
           BESA_CI_TEST_RESULTS_PATH: .artifacts/patch-provider-live-proof/test-results
           BESA_CI_LOG_PATH: .artifacts/patch-provider-live-proof/logs
           BESA_CI_JSON_REPORT_PATH: .artifacts/patch-provider-live-proof/test-results/playwright-results.json
+          BESA_CI_PROOF_SUMMARY_PATH: .artifacts/patch-provider-live-proof/test-results/proof-summary.json
         run: node scripts/write-playwright-proof-summary.mjs

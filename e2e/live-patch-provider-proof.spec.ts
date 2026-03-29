@@ -2,6 +2,10 @@ import { readFile } from "node:fs/promises";
 
 import { expect, test, type Page } from "@playwright/test";
 
+import { generateCodePatchSuggestion } from "@/lib/builder/code-patch-service";
+import { defaultProjectModelAdapterConfig } from "@/lib/model-adapters/registry";
+
+import { recordProofCheck, resetProofSummary } from "./support/proof-summary";
 import { runtimeE2EStoreFile, resetE2EStore } from "./support/store";
 import {
   e2eLocale,
@@ -27,6 +31,21 @@ interface StoredPatchProposal {
   createdAt: string;
 }
 
+const patchFallbackSampleInput = {
+  file: {
+    path: "src/components/Hero.tsx",
+    name: "Hero.tsx",
+    kind: "component" as const,
+    language: "tsx" as const,
+  },
+  currentContent: [
+    "export function Hero() {",
+    "  return <section data-testid=\"hero-root\">Hero section</section>;",
+    "}",
+  ].join("\n"),
+  requestPrompt: "Add a safer CTA marker and a tiny review note for this file only.",
+};
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -47,6 +66,25 @@ function looksLikeDiffPayload(value: string) {
     /(?:^|\n)diff --git /m.test(trimmed) ||
     (/^--- .+\n\+\+\+ /m.test(trimmed) && trimmed.includes("\n@@"))
   );
+}
+
+function expectStableObjectKeys(
+  value: Record<string, unknown>,
+  requiredKeys: string[],
+  optionalKeys: string[] = [],
+) {
+  const keys = Object.keys(value).sort();
+  const allowedKeys = [...requiredKeys, ...optionalKeys].sort();
+
+  expect(keys).toEqual(expect.arrayContaining([...requiredKeys].sort()));
+  expect(keys.every((key) => allowedKeys.includes(key))).toBeTruthy();
+}
+
+function buildDefaultPatchConfig() {
+  return defaultProjectModelAdapterConfig({
+    workspaceId: "workspace_patch_live_proof",
+    projectId: "project_patch_live_proof",
+  });
 }
 
 async function login(
@@ -89,6 +127,10 @@ test.describe.serial("live patch provider proof", () => {
     "The live patch provider proof runs only in local fallback mode with the live provider enabled.",
   );
 
+  test.beforeAll(async () => {
+    await resetProofSummary();
+  });
+
   test.beforeEach(async () => {
     await resetE2EStore();
   });
@@ -113,6 +155,36 @@ test.describe.serial("live patch provider proof", () => {
 
     const storedProposal = await waitForProposalRecord(prompt, filePath);
 
+    expectStableObjectKeys(
+      storedProposal,
+      [
+        "baseContent",
+        "changeSummary",
+        "createdAt",
+        "filePath",
+        "id",
+        "proposedContent",
+        "rationale",
+        "requestPrompt",
+        "source",
+        "status",
+        "title",
+      ],
+      [
+        "archiveReason",
+        "archivedAt",
+        "baseRevisionId",
+        "baseRevisionNumber",
+        "codeStateId",
+        "fileId",
+        "invalidatedByRevisionId",
+        "invalidatedByRevisionNumber",
+        "projectId",
+        "resolutionNote",
+        "resolvedAt",
+        "resolvedRevisionId",
+      ],
+    );
     expect(storedProposal.source).toBe("external_patch_adapter_v1");
     expect(storedProposal.status).toBe("pending");
     expect(storedProposal.title.trim().length).toBeGreaterThan(0);
@@ -120,6 +192,7 @@ test.describe.serial("live patch provider proof", () => {
     expect(storedProposal.changeSummary.trim().length).toBeGreaterThan(0);
     expect(storedProposal.proposedContent.trim().length).toBeGreaterThan(0);
     expect(storedProposal.filePath).toBe(filePath);
+    expect(storedProposal.requestPrompt).toBe(prompt);
     expect(storedProposal.baseContent).not.toBe(storedProposal.proposedContent);
     expect(looksLikeDiffPayload(storedProposal.proposedContent)).toBeFalsy();
 
@@ -142,5 +215,69 @@ test.describe.serial("live patch provider proof", () => {
     await expect(historyItem).toContainText("External model");
     await expect(historyItem).toContainText("external_patch_adapter_v1");
     await expect(historyItem).toContainText(filePath);
+
+    await recordProofCheck(
+      "shapeCheck",
+      "passed",
+      "Hosted patch proof preserved external_patch_adapter_v1 plus one-file proposal keys and non-diff proposedContent.",
+    );
+    await recordProofCheck(
+      "nonDestructiveCheck",
+      "passed",
+      "Hosted patch proof kept the proposal in pending review state and did not apply file changes.",
+    );
+  });
+
+  test("falls back safely to the mock patch suggester when the hosted provider is unavailable", async () => {
+    const trackedKeys = [
+      "ENABLE_EXTERNAL_PATCH_SUGGESTION",
+      "enableExternalPatchSuggestion",
+      "EXTERNAL_PATCH_MODEL",
+      "EXTERNAL_PATCH_PROVIDER_KEY",
+      "EXTERNAL_PATCH_PROVIDER_LABEL",
+      "EXTERNAL_PATCH_ENDPOINT_URL",
+      "EXTERNAL_PATCH_API_KEY_ENV_VAR",
+      "MISSING_PHASE70_PATCH_TOKEN",
+    ] as const;
+    const originalEnv = new Map<string, string | undefined>(
+      trackedKeys.map((key) => [key, process.env[key]]),
+    );
+
+    process.env.ENABLE_EXTERNAL_PATCH_SUGGESTION = "true";
+    process.env.enableExternalPatchSuggestion = "true";
+    process.env.EXTERNAL_PATCH_MODEL = process.env.EXTERNAL_PATCH_MODEL || "gpt-5.4-mini";
+    process.env.EXTERNAL_PATCH_PROVIDER_KEY = "openai_compatible";
+    process.env.EXTERNAL_PATCH_PROVIDER_LABEL = "OpenAI-compatible live";
+    delete process.env.EXTERNAL_PATCH_ENDPOINT_URL;
+    process.env.EXTERNAL_PATCH_API_KEY_ENV_VAR = "MISSING_PHASE70_PATCH_TOKEN";
+    delete process.env.MISSING_PHASE70_PATCH_TOKEN;
+
+    try {
+      const result = await generateCodePatchSuggestion(patchFallbackSampleInput, buildDefaultPatchConfig());
+
+      expect(result.suggestion.source).toBe("mock_assistant");
+      expect(result.adapterExecution.requestedSelection).toBe("external_model");
+      expect(result.adapterExecution.executedSelection).toBe("deterministic_internal");
+      expect(result.adapterExecution.executionMode).toBe("fallback");
+      expect(result.adapterExecution.requestedAdapterKey).toBe("external_patch_adapter_v1");
+      expect(result.adapterExecution.executedAdapterKey).toBe("mock_assistant");
+      expect(result.adapterExecution.fallbackReason).toContain(
+        "Environment variable MISSING_PHASE70_PATCH_TOKEN is not set.",
+      );
+
+      await recordProofCheck(
+        "fallbackCheck",
+        "passed",
+        "Hosted patch proof still falls back safely to mock_assistant when the configured patch API-key env var is missing.",
+      );
+    } finally {
+      for (const [key, value] of originalEnv.entries()) {
+        if (typeof value === "undefined") {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+    }
   });
 });

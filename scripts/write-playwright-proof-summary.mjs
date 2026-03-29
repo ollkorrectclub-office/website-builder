@@ -16,6 +16,19 @@ function formatLink(label, url) {
   return `[${label}](${url})`;
 }
 
+function guardrailLabel(status) {
+  switch (status) {
+    case "passed":
+      return "PASSED";
+    case "failed":
+      return "FAILED";
+    case "not_applicable":
+      return "N/A";
+    default:
+      return "UNAVAILABLE";
+  }
+}
+
 function statusLabel(status) {
   switch (status) {
     case "success":
@@ -26,6 +39,18 @@ function statusLabel(status) {
       return "CANCELLED";
     default:
       return status.toUpperCase();
+  }
+}
+
+async function readProofSummary(path) {
+  if (!path) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(await readFile(path, "utf8"));
+  } catch {
+    return null;
   }
 }
 
@@ -140,6 +165,7 @@ const logsArtifact = formatLink(
 const reportPath = value("BESA_CI_REPORT_PATH");
 const resultsPath = value("BESA_CI_TEST_RESULTS_PATH");
 const logsPath = value("BESA_CI_LOG_PATH");
+const proofSummary = await readProofSummary(value("BESA_CI_PROOF_SUMMARY_PATH"));
 const counts = await readPlaywrightCounts(value("BESA_CI_JSON_REPORT_PATH"));
 const summaryLabel = counts
   ? `${counts.passed} passed, ${counts.failed} failed, ${counts.skipped} skipped, ${counts.flaky} flaky`
@@ -158,6 +184,25 @@ if (jobVariant) {
 lines.push(`- Raw job status: \`${jobStatus}\``);
 lines.push(`- Verification command: \`${verificationCommand}\``);
 lines.push(`- Test summary: **${summaryLabel}**`);
+if (proofSummary) {
+  lines.push("");
+  lines.push("### Guardrails");
+  lines.push(
+    `- Shape check: **${guardrailLabel(proofSummary.shapeCheck?.status)}**${
+      proofSummary.shapeCheck?.details ? ` - ${proofSummary.shapeCheck.details}` : ""
+    }`,
+  );
+  lines.push(
+    `- Fallback check: **${guardrailLabel(proofSummary.fallbackCheck?.status)}**${
+      proofSummary.fallbackCheck?.details ? ` - ${proofSummary.fallbackCheck.details}` : ""
+    }`,
+  );
+  lines.push(
+    `- Non-destructive check: **${guardrailLabel(proofSummary.nonDestructiveCheck?.status)}**${
+      proofSummary.nonDestructiveCheck?.details ? ` - ${proofSummary.nonDestructiveCheck.details}` : ""
+    }`,
+  );
+}
 lines.push("");
 lines.push("### Artifacts");
 lines.push(`- Playwright report: ${reportArtifact}`);

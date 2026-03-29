@@ -6,6 +6,7 @@ import { getPlannerService } from "@/lib/planner/service";
 import type { PlannerInput } from "@/lib/planner/types";
 
 import { e2eLocale, e2eWorkspaceSlug, isLiveProviderE2EMode, isSupabaseE2EMode } from "./support/env";
+import { recordProofCheck, resetProofSummary } from "./support/proof-summary";
 import { runtimeE2EStoreFile, resetE2EStore } from "./support/store";
 
 const workspaceProjectsPath = `/${e2eLocale}/app/workspaces/${e2eWorkspaceSlug}/projects`;
@@ -81,6 +82,18 @@ function expectNonEmptyStringList(value: unknown) {
   expect((value as unknown[]).every((item) => typeof item === "string" && item.trim().length > 0)).toBeTruthy();
 }
 
+function expectStableObjectKeys(
+  value: Record<string, unknown>,
+  requiredKeys: string[],
+  optionalKeys: string[] = [],
+) {
+  const keys = Object.keys(value).sort();
+  const allowedKeys = [...requiredKeys, ...optionalKeys].sort();
+
+  expect(keys).toEqual(expect.arrayContaining([...requiredKeys].sort()));
+  expect(keys.every((key) => allowedKeys.includes(key))).toBeTruthy();
+}
+
 function samplePlannerInput(): PlannerInput {
   return {
     name: "Phase 67 Fallback Proof",
@@ -109,6 +122,10 @@ test.describe.serial("live planner provider proof", () => {
     isSupabaseE2EMode() || !isLiveProviderE2EMode(),
     "The live planner provider proof runs only in local fallback mode with the live provider enabled.",
   );
+
+  test.beforeAll(async () => {
+    await resetProofSummary();
+  });
 
   test.beforeEach(async () => {
     await resetE2EStore();
@@ -202,13 +219,53 @@ test.describe.serial("live planner provider proof", () => {
     const structuredPayload = artifacts.find((artifact) => artifact.artifactType === "plan_payload");
 
     expect(normalizedBrief?.payload).toBeTruthy();
+    expectStableObjectKeys(normalizedBrief?.payload ?? {}, [
+      "businessCategory",
+      "capabilities",
+      "country",
+      "desiredPagesFeatures",
+      "designStyle",
+      "name",
+      "primaryLocale",
+      "projectType",
+      "prompt",
+      "supportedLocales",
+      "targetUsers",
+    ]);
     expect(typeof normalizedBrief?.payload?.name).toBe("string");
     expect(typeof normalizedBrief?.payload?.projectType).toBe("string");
+    expect(Array.isArray(normalizedBrief?.payload?.targetUsers)).toBeTruthy();
+    expect(Array.isArray(normalizedBrief?.payload?.desiredPagesFeatures)).toBeTruthy();
+    expect(Array.isArray(normalizedBrief?.payload?.supportedLocales)).toBeTruthy();
+    expect(typeof normalizedBrief?.payload?.capabilities).toBe("object");
     expect(planningSignals?.payload).toBeTruthy();
+    expectStableObjectKeys(
+      planningSignals?.payload ?? {},
+      [
+      "enabledCapabilities",
+      "featureCount",
+      "localeMode",
+      "marketScope",
+      "requestedPageCount",
+      "resolvedPageCount",
+      "trigger",
+      ],
+      ["providerModel", "providerNotes"],
+    );
     expect(typeof planningSignals?.payload?.requestedPageCount).toBe("number");
     expect(typeof planningSignals?.payload?.resolvedPageCount).toBe("number");
     expect(Array.isArray(planningSignals?.payload?.enabledCapabilities)).toBeTruthy();
     expect(structuredPayload?.payload).toBeTruthy();
+    expectStableObjectKeys(structuredPayload?.payload ?? {}, [
+      "authRoles",
+      "dataModels",
+      "designDirection",
+      "featureList",
+      "integrationsNeeded",
+      "pageMap",
+      "productSummary",
+      "targetUsers",
+    ]);
     expect(structuredPayload?.payload).toMatchObject(plan ?? {});
 
     const latestAdapterRun = (store.modelAdapterRuns ?? []).find(
@@ -221,6 +278,17 @@ test.describe.serial("live planner provider proof", () => {
     expect(latestAdapterRun?.executionMode).toBe("selected");
     expect(latestAdapterRun?.requestedAdapterKey).toBe("external_model_adapter_v1");
     expect(latestAdapterRun?.executedAdapterKey).toBe("external_model_adapter_v1");
+
+    await recordProofCheck(
+      "shapeCheck",
+      "passed",
+      "Hosted planner run preserved external_model_adapter_v1 plus normalized_brief, planning_signals, and plan_payload guardrail keys.",
+    );
+    await recordProofCheck(
+      "nonDestructiveCheck",
+      "not_applicable",
+      "Planner proof validates stored planner artifacts only and does not exercise file mutation or proposal application.",
+    );
   });
 
   test("falls back safely to the rule-based planner when the hosted provider is unavailable", async () => {
@@ -259,6 +327,12 @@ test.describe.serial("live planner provider proof", () => {
       expect(execution.adapterExecution.executedAdapterKey).toBe("rules_planner_v1");
       expect(execution.adapterExecution.fallbackReason).toContain(
         "Environment variable MISSING_PHASE67_PLANNER_TOKEN is not set.",
+      );
+
+      await recordProofCheck(
+        "fallbackCheck",
+        "passed",
+        "Hosted planner proof still falls back safely to rules_planner_v1 when the configured planner API-key env var is missing.",
       );
     } finally {
       for (const [key, value] of originalEnv.entries()) {

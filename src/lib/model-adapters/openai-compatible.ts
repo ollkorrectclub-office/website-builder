@@ -165,6 +165,34 @@ function normalizeUsage(payload: Record<string, unknown>): ModelAdapterUsageReco
   };
 }
 
+function isAbortLikeError(error: unknown) {
+  return (
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (error instanceof Error &&
+      (error.name === "AbortError" || error.message.toLowerCase().includes("timed out")))
+  );
+}
+
+function classifyTransportError(error: unknown) {
+  return isAbortLikeError(error) ? "timeout" : "transport_error";
+}
+
+function extractProviderErrorMessage(responseJson: Record<string, unknown> | null, fallbackText: string) {
+  if (typeof responseJson?.error === "string" && responseJson.error.trim().length > 0) {
+    return responseJson.error.trim();
+  }
+
+  if (responseJson?.error && typeof responseJson.error === "object") {
+    const errorRecord = responseJson.error as Record<string, unknown>;
+
+    if (typeof errorRecord.message === "string" && errorRecord.message.trim().length > 0) {
+      return errorRecord.message.trim();
+    }
+  }
+
+  return fallbackText.trim() || null;
+}
+
 export interface OpenAICompatibleJsonResponseResult<T> {
   parsed: T;
   trace: ModelAdapterTraceRecord;
@@ -279,9 +307,16 @@ export async function requestOpenAICompatibleJson<T>(input: {
     };
 
     if (!response.ok) {
+      const providerMessage = extractProviderErrorMessage(responseJson, response.statusText || responseText);
       throw new ExternalProviderExecutionError(
         `Provider request failed with ${response.status} ${response.statusText}.`,
-        { latencyMs, trace },
+        {
+          latencyMs,
+          trace,
+          classification: "http_error",
+          statusCode: response.status,
+          providerMessage,
+        },
       );
     }
 
@@ -289,6 +324,7 @@ export async function requestOpenAICompatibleJson<T>(input: {
       throw new ExternalProviderExecutionError("Provider response did not include any output text.", {
         latencyMs,
         trace,
+        classification: "empty_output",
       });
     }
 
@@ -300,6 +336,7 @@ export async function requestOpenAICompatibleJson<T>(input: {
       throw new ExternalProviderExecutionError("Provider output was not valid JSON.", {
         latencyMs,
         trace,
+        classification: "invalid_json",
       });
     }
 
@@ -337,7 +374,11 @@ export async function requestOpenAICompatibleJson<T>(input: {
 
     throw new ExternalProviderExecutionError(
       error instanceof Error ? error.message : "Provider request failed.",
-      { latencyMs, trace },
+      {
+        latencyMs,
+        trace,
+        classification: classifyTransportError(error),
+      },
     );
   } finally {
     timeout.dispose();

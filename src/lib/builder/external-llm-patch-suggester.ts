@@ -52,6 +52,10 @@ function buildPatchPromptTemplate() {
     "Propose changes for exactly one file: the file provided in the input.",
     "Do not mention, patch, or depend on any other file, route, or module.",
     "Return the full replacement content for the same file path only.",
+    "proposedContent must be the complete final file contents, not a diff, patch hunk, checklist, or commentary.",
+    "title must be a short review-ready label.",
+    "rationale must be plain text, safe, and limited to the requested file only.",
+    "changeSummary must be plain text and describe the concrete file change in one short sentence.",
     "Keep the patch conservative, syntax-valid, and aligned to the request.",
     "Do not output markdown, code fences, unified diff hunks, or explanation outside the schema.",
   ].join(" ");
@@ -104,7 +108,29 @@ function looksLikeMultiFileOrDiffPayload(value: string) {
   );
 }
 
-function validateReplacementContent(value: unknown) {
+function looksLikeFileHeaderPayload(value: string) {
+  return /(?:^|\n)(?:file|path)\s*:/i.test(value);
+}
+
+function validateShortTextField(fieldName: string, value: unknown) {
+  if (typeof value !== "string") {
+    throw new Error(`Provider output did not include ${fieldName}.`);
+  }
+
+  const normalized = value.trim();
+
+  if (!normalized) {
+    throw new Error(`Provider output did not include ${fieldName}.`);
+  }
+
+  if (normalized.includes("```") || looksLikeMultiFileOrDiffPayload(normalized)) {
+    throw new Error(`Provider output included invalid ${fieldName}.`);
+  }
+
+  return normalized;
+}
+
+function validateReplacementContent(value: unknown, currentContent: string) {
   if (typeof value !== "string") {
     throw new Error("Provider output did not include patch content.");
   }
@@ -119,18 +145,26 @@ function validateReplacementContent(value: unknown) {
     throw new Error("Provider output must return full replacement content for one file, not a diff.");
   }
 
+  if (looksLikeFileHeaderPayload(normalized)) {
+    throw new Error("Provider output must return replacement content only, without file headers.");
+  }
+
+  if (normalized.trim() === currentContent.trim()) {
+    throw new Error("Provider output did not propose any effective file change.");
+  }
+
   return normalized;
 }
 
 function transformProviderOutputToPatchSuggestion(
   output: ExternalPatchStructuredOutput,
-  baseline: GeneratedCodePatchSuggestion,
+  input: CodePatchSuggestionInput,
 ): GeneratedCodePatchSuggestion {
   return {
-    title: normalizeString(output.title) || baseline.title,
-    rationale: normalizeString(output.rationale) || baseline.rationale,
-    changeSummary: normalizeString(output.changeSummary) || baseline.changeSummary,
-    proposedContent: validateReplacementContent(output.proposedContent),
+    title: validateShortTextField("a patch title", output.title),
+    rationale: validateShortTextField("a patch rationale", output.rationale),
+    changeSummary: validateShortTextField("a patch change summary", output.changeSummary),
+    proposedContent: validateReplacementContent(output.proposedContent, input.currentContent),
     source: "external_patch_adapter_v1",
   };
 }
@@ -198,12 +232,27 @@ export class ExternalLLMPatchSuggestionAdapter implements ExternalPatchSuggestio
       );
     }
 
-    return {
-      suggestion: transformProviderOutputToPatchSuggestion(providerResponse.parsed, baseline),
-      execution: {
-        latencyMs: providerResponse.latencyMs,
-        trace: providerResponse.trace,
-      },
-    };
+    try {
+      return {
+        suggestion: transformProviderOutputToPatchSuggestion(providerResponse.parsed, input),
+        execution: {
+          latencyMs: providerResponse.latencyMs,
+          trace: providerResponse.trace,
+        },
+      };
+    } catch (error) {
+      if (error instanceof ExternalProviderExecutionError) {
+        throw error;
+      }
+
+      throw new ExternalProviderExecutionError(
+        error instanceof Error ? error.message : "External patch output was invalid.",
+        {
+          latencyMs: providerResponse.latencyMs,
+          trace: providerResponse.trace,
+          classification: "invalid_output",
+        },
+      );
+    }
   }
 }

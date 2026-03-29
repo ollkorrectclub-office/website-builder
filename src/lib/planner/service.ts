@@ -33,6 +33,9 @@ function logExternalPlannerFallback(input: {
   providerKey: string | null;
   providerLabel: string | null;
   modelName: string | null;
+  endpointUrl: string | null;
+  classification: string | null;
+  latencyMs: number | null;
   reason: string;
 }) {
   console.warn("[planner-service] External planner failed, falling back to rule-based planning.", input);
@@ -93,16 +96,24 @@ class AdapterPlannerService implements PlannerService {
             },
           };
         } catch (error) {
-          fallbackReason = error instanceof Error ? error.message : "External planner adapter failed.";
-          if (error instanceof ExternalProviderExecutionError) {
-            latencyMs = error.latencyMs;
-            trace = error.trace;
+          const providerError = error instanceof ExternalProviderExecutionError ? error : null;
+          fallbackReason = providerError
+            ? `[${providerError.classification}] ${providerError.message}`
+            : error instanceof Error
+              ? error.message
+              : "External planner adapter failed.";
+          if (providerError) {
+            latencyMs = providerError.latencyMs;
+            trace = providerError.trace;
           }
           logExternalPlannerFallback({
             trigger,
             providerKey: resolved.providerKey,
             providerLabel: resolved.providerLabel,
             modelName: resolved.modelName,
+            endpointUrl: resolved.endpointUrl,
+            classification: providerError?.classification ?? null,
+            latencyMs,
             reason: fallbackReason,
           });
 

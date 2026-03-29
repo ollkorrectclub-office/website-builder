@@ -55,6 +55,15 @@ async function openDeployTimeline(page: Page) {
   await page.waitForLoadState("networkidle");
 }
 
+function isExecutionContextUrl(url: URL, executionRunId: string) {
+  return (
+    url.pathname === `${projectBasePath}/deploy` &&
+    url.searchParams.get("executionRun") === executionRunId &&
+    url.searchParams.has("deployRun") &&
+    url.searchParams.has("release")
+  );
+}
+
 test.describe.serial("supabase deploy execution parity", () => {
   test.skip(!isSupabaseE2EMode(), "This suite only runs when Supabase deploy parity mode is enabled.");
 
@@ -88,7 +97,10 @@ test.describe.serial("supabase deploy execution parity", () => {
     await page.goto(`${projectBasePath}/deploy?executionRun=${encodeURIComponent(initialExecutionRunId ?? "")}`);
     await page.waitForLoadState("networkidle");
     await expect(page.getByTestId("deploy-recheck-execution")).toBeEnabled();
-    await page.getByTestId("deploy-recheck-execution").click();
+    await Promise.all([
+      page.waitForURL((url) => isExecutionContextUrl(url, initialExecutionRunId ?? "")),
+      page.getByTestId("deploy-recheck-execution").click(),
+    ]);
     await page.waitForLoadState("networkidle");
 
     await openDeployTimeline(page);
@@ -108,7 +120,16 @@ test.describe.serial("supabase deploy execution parity", () => {
     await page.getByTestId("deploy-run-execution").click();
     await page.waitForLoadState("networkidle");
     await expect(page.getByTestId("deploy-retry-execution")).toBeEnabled();
-    await page.getByTestId("deploy-retry-execution").click();
+    await Promise.all([
+      page.waitForURL(
+        (url) =>
+          url.pathname === `${projectBasePath}/deploy` &&
+          url.searchParams.get("executionRun") !== initialExecutionRunId &&
+          url.searchParams.has("deployRun") &&
+          url.searchParams.has("release"),
+      ),
+      page.getByTestId("deploy-retry-execution").click(),
+    ]);
     await page.waitForLoadState("networkidle");
 
     const retriedExecutionRunId = new URL(page.url()).searchParams.get("executionRun");

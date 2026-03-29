@@ -1,0 +1,82 @@
+name: Provider Supabase Parity
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  provider-supabase-parity:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      BESA_E2E_SUPABASE_OWNER_EMAIL: ${{ secrets.BESA_E2E_SUPABASE_OWNER_EMAIL }}
+      BESA_E2E_SUPABASE_OWNER_PASSWORD: ${{ secrets.BESA_E2E_SUPABASE_OWNER_PASSWORD }}
+      BESA_E2E_SUPABASE_WORKSPACE_SLUG: ${{ secrets.BESA_E2E_SUPABASE_WORKSPACE_SLUG }}
+      BESA_E2E_SUPABASE_PROJECT_SLUG: ${{ secrets.BESA_E2E_SUPABASE_PROJECT_SLUG }}
+      BESA_E2E_SUPABASE_LOCALE: ${{ secrets.BESA_E2E_SUPABASE_LOCALE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Supabase provider parity verification
+        run: npm run verify:provider:supabase
+
+      - name: Upload Playwright report artifact
+        if: always()
+        id: upload_provider_supabase_report
+        uses: actions/upload-artifact@v6
+        with:
+          name: provider-supabase-parity-playwright-report
+          path: .artifacts/provider-supabase-parity/playwright-report
+          if-no-files-found: warn
+
+      - name: Upload test-results artifact
+        if: always()
+        id: upload_provider_supabase_results
+        uses: actions/upload-artifact@v6
+        with:
+          name: provider-supabase-parity-test-results
+          path: .artifacts/provider-supabase-parity/test-results
+          if-no-files-found: warn
+
+      - name: Upload wrapper and server logs artifact
+        if: always()
+        id: upload_provider_supabase_logs
+        uses: actions/upload-artifact@v6
+        with:
+          name: provider-supabase-parity-wrapper-logs
+          path: .artifacts/provider-supabase-parity/logs
+          if-no-files-found: warn
+
+      - name: Write provider Supabase parity job summary
+        if: always()
+        env:
+          BESA_CI_JOB_LABEL: Provider Supabase parity
+          BESA_CI_JOB_VARIANT: supabase_parity
+          BESA_CI_JOB_STATUS: ${{ job.status }}
+          BESA_CI_VERIFICATION_COMMAND: npm run verify:provider:supabase
+          BESA_CI_REPORT_ARTIFACT_NAME: provider-supabase-parity-playwright-report
+          BESA_CI_REPORT_ARTIFACT_URL: ${{ steps.upload_provider_supabase_report.outputs.artifact-url }}
+          BESA_CI_TEST_RESULTS_ARTIFACT_NAME: provider-supabase-parity-test-results
+          BESA_CI_TEST_RESULTS_ARTIFACT_URL: ${{ steps.upload_provider_supabase_results.outputs.artifact-url }}
+          BESA_CI_LOG_ARTIFACT_NAME: provider-supabase-parity-wrapper-logs
+          BESA_CI_LOG_ARTIFACT_URL: ${{ steps.upload_provider_supabase_logs.outputs.artifact-url }}
+          BESA_CI_REPORT_PATH: .artifacts/provider-supabase-parity/playwright-report
+          BESA_CI_TEST_RESULTS_PATH: .artifacts/provider-supabase-parity/test-results
+          BESA_CI_LOG_PATH: .artifacts/provider-supabase-parity/logs
+          BESA_CI_JSON_REPORT_PATH: .artifacts/provider-supabase-parity/test-results/playwright-results.json
+          BESA_CI_PROOF_SUMMARY_PATH: .artifacts/provider-supabase-parity/test-results/proof-summary.json
+        run: node scripts/write-playwright-proof-summary.mjs

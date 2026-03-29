@@ -8,7 +8,7 @@ jobs:
   provider-live-smoke:
     runs-on: ubuntu-latest
     env:
-      BESA_E2E_RUNTIME: dev
+      BESA_E2E_RUNTIME: start
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - name: Checkout
@@ -28,3 +28,50 @@ jobs:
 
       - name: Run env-gated live smoke verification
         run: npm run verify:provider-live-smoke
+
+      - name: Upload Playwright report artifact
+        if: always()
+        id: upload_provider_live_report
+        uses: actions/upload-artifact@v6
+        with:
+          name: provider-live-smoke-playwright-report
+          path: .artifacts/provider-live-smoke/playwright-report
+          if-no-files-found: warn
+
+      - name: Upload test-results artifact
+        if: always()
+        id: upload_provider_live_results
+        uses: actions/upload-artifact@v6
+        with:
+          name: provider-live-smoke-test-results
+          path: .artifacts/provider-live-smoke/test-results
+          if-no-files-found: warn
+
+      - name: Upload wrapper and server logs artifact
+        if: always()
+        id: upload_provider_live_logs
+        uses: actions/upload-artifact@v6
+        with:
+          name: provider-live-smoke-wrapper-logs
+          path: .artifacts/provider-live-smoke/logs
+          if-no-files-found: warn
+
+      - name: Write provider live smoke job summary
+        if: always()
+        env:
+          BESA_CI_JOB_LABEL: Provider live smoke
+          BESA_CI_JOB_VARIANT: live_hosted_provider
+          BESA_CI_JOB_STATUS: ${{ job.status }}
+          BESA_CI_VERIFICATION_COMMAND: npm run verify:provider-live-smoke
+          BESA_CI_REPORT_ARTIFACT_NAME: provider-live-smoke-playwright-report
+          BESA_CI_REPORT_ARTIFACT_URL: ${{ steps.upload_provider_live_report.outputs.artifact-url }}
+          BESA_CI_TEST_RESULTS_ARTIFACT_NAME: provider-live-smoke-test-results
+          BESA_CI_TEST_RESULTS_ARTIFACT_URL: ${{ steps.upload_provider_live_results.outputs.artifact-url }}
+          BESA_CI_LOG_ARTIFACT_NAME: provider-live-smoke-wrapper-logs
+          BESA_CI_LOG_ARTIFACT_URL: ${{ steps.upload_provider_live_logs.outputs.artifact-url }}
+          BESA_CI_REPORT_PATH: .artifacts/provider-live-smoke/playwright-report
+          BESA_CI_TEST_RESULTS_PATH: .artifacts/provider-live-smoke/test-results
+          BESA_CI_LOG_PATH: .artifacts/provider-live-smoke/logs
+          BESA_CI_JSON_REPORT_PATH: .artifacts/provider-live-smoke/test-results/playwright-results.json
+          BESA_CI_PROOF_SUMMARY_PATH: .artifacts/provider-live-smoke/test-results/proof-summary.json
+        run: node scripts/write-playwright-proof-summary.mjs

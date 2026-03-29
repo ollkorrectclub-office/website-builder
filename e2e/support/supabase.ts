@@ -58,6 +58,12 @@ export interface SupabaseWorkspaceMembershipBaseline {
   ownerMembershipId: string;
 }
 
+export interface SupabaseProviderVerificationBaseline {
+  workspaceId: string;
+  projectId: string;
+  projectName: string;
+}
+
 export async function normalizeSupabaseWorkspaceMembershipBaseline(input: {
   ownerEmail: string;
   workspaceSlug: string;
@@ -175,6 +181,137 @@ export async function normalizeSupabaseWorkspaceMembershipBaseline(input: {
     ownerUserId: ownerProfile.id,
     ownerMembershipId: ownerMembership.id,
   } satisfies SupabaseWorkspaceMembershipBaseline;
+}
+
+export async function normalizeSupabaseProviderVerificationBaseline(input: {
+  workspaceSlug: string;
+  projectSlug: string;
+}) {
+  const admin = createSupabaseAdminClient();
+
+  const { data: workspace, error: workspaceError } = await admin
+    .from("workspaces")
+    .select("id,slug")
+    .eq("slug", input.workspaceSlug)
+    .maybeSingle<WorkspaceRow>();
+
+  if (workspaceError) {
+    throw new Error(`Unable to load the Supabase workspace: ${workspaceError.message}`);
+  }
+
+  if (!workspace) {
+    throw new Error(`No workspace was found for slug ${input.workspaceSlug}.`);
+  }
+
+  const { data: project, error: projectError } = await admin
+    .from("projects")
+    .select("id,slug,name,owner_user_id")
+    .eq("workspace_id", workspace.id)
+    .eq("slug", input.projectSlug)
+    .maybeSingle<ProjectRow>();
+
+  if (projectError) {
+    throw new Error(`Unable to load the Supabase project: ${projectError.message}`);
+  }
+
+  if (!project) {
+    throw new Error(`No project was found for slug ${input.projectSlug} in workspace ${input.workspaceSlug}.`);
+  }
+
+  const { error: deleteRunsError } = await admin
+    .from("project_model_adapter_runs")
+    .delete()
+    .eq("project_id", project.id)
+    .eq("trigger", "provider_verification")
+    .is("linked_entity_type", null);
+
+  if (deleteRunsError) {
+    throw new Error(`Unable to reset provider verification runs: ${deleteRunsError.message}`);
+  }
+
+  return {
+    workspaceId: workspace.id,
+    projectId: project.id,
+    projectName: project.name,
+  } satisfies SupabaseProviderVerificationBaseline;
+}
+
+export async function saveSupabaseProviderVerificationConfig(input: {
+  workspaceSlug: string;
+  projectSlug: string;
+  externalEndpointUrl: string;
+  externalApiKeyEnvVar: string;
+  externalProviderKey?: "openai_compatible" | "custom_http";
+  planningModel: string;
+  generationModel: string;
+  patchModel: string;
+}) {
+  const admin = createSupabaseAdminClient();
+
+  const { data: workspace, error: workspaceError } = await admin
+    .from("workspaces")
+    .select("id,slug")
+    .eq("slug", input.workspaceSlug)
+    .maybeSingle<WorkspaceRow>();
+
+  if (workspaceError) {
+    throw new Error(`Unable to load the Supabase workspace: ${workspaceError.message}`);
+  }
+
+  if (!workspace) {
+    throw new Error(`No workspace was found for slug ${input.workspaceSlug}.`);
+  }
+
+  const { data: project, error: projectError } = await admin
+    .from("projects")
+    .select("id,slug,name,owner_user_id")
+    .eq("workspace_id", workspace.id)
+    .eq("slug", input.projectSlug)
+    .maybeSingle<ProjectRow>();
+
+  if (projectError) {
+    throw new Error(`Unable to load the Supabase project: ${projectError.message}`);
+  }
+
+  if (!project) {
+    throw new Error(`No project was found for slug ${input.projectSlug} in workspace ${input.workspaceSlug}.`);
+  }
+
+  const timestamp = new Date().toISOString();
+  const { data: existingConfig, error: configLookupError } = await admin
+    .from("project_model_adapter_configs")
+    .select("id,created_at")
+    .eq("workspace_id", workspace.id)
+    .eq("project_id", project.id)
+    .maybeSingle<{ id: string; created_at: string }>();
+
+  if (configLookupError) {
+    throw new Error(`Unable to load the provider config baseline: ${configLookupError.message}`);
+  }
+
+  const row = {
+    id: existingConfig?.id ?? crypto.randomUUID(),
+    workspace_id: workspace.id,
+    project_id: project.id,
+    planning_selection: "external_model",
+    generation_selection: "external_model",
+    patch_selection: "external_model",
+    external_provider_key: input.externalProviderKey ?? "openai_compatible",
+    external_provider_label: "OpenAI-compatible",
+    external_endpoint_url: input.externalEndpointUrl,
+    external_api_key_env_var: input.externalApiKeyEnvVar,
+    planning_model: input.planningModel,
+    generation_model: input.generationModel,
+    patch_model: input.patchModel,
+    created_at: existingConfig?.created_at ?? timestamp,
+    updated_at: timestamp,
+  };
+
+  const { error: saveError } = await admin.from("project_model_adapter_configs").upsert(row);
+
+  if (saveError) {
+    throw new Error(`Unable to save the provider config baseline: ${saveError.message}`);
+  }
 }
 
 export async function waitForSupabaseWorkspaceInvitation(input: {

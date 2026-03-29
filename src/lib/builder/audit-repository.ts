@@ -74,6 +74,14 @@ function latestTimelineEventOccurredAt(events: ProjectAuditTimelineEventRecord[]
   return dedupeTimelineEvents(events)[0]?.occurredAt ?? null;
 }
 
+type DeployExecutionFreshnessRow = {
+  id: string;
+  retryOfExecutionRunId: string | null;
+  transitionCount: number;
+  lastCheckedAt: string | null;
+  updatedAt: string;
+};
+
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -1459,10 +1467,69 @@ async function loadSupabaseTimelineBundleWithDeployFreshness(
     return { context, events };
   }
 
+  const loadDeployExecutionFreshnessRows = async (
+    projectId: string,
+  ): Promise<DeployExecutionFreshnessRow[]> => {
+    const client = createSupabaseServerClient();
+
+    if (!client) {
+      return [];
+    }
+
+    const { data, error } = await client
+      .from("project_deploy_execution_runs")
+      .select("id,retry_of_execution_run_id,status_transitions_json,last_checked_at,updated_at")
+      .eq("project_id", projectId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return (data ?? []).map((row) => {
+      const record = row as Record<string, unknown>;
+      const transitionRows = Array.isArray(record.status_transitions_json)
+        ? (record.status_transitions_json as Array<unknown>)
+        : [];
+
+      return {
+        id: String(record.id),
+        retryOfExecutionRunId:
+          typeof record.retry_of_execution_run_id === "string" ? record.retry_of_execution_run_id : null,
+        transitionCount: transitionRows.length,
+        lastCheckedAt:
+          typeof record.last_checked_at === "string" ? record.last_checked_at : null,
+        updatedAt: String(record.updated_at ?? nowIso()),
+      };
+    });
+  };
+
+  const listMissingRecheckedExecutionIds = async (
+    projectId: string,
+    candidateEvents: ProjectAuditTimelineEventRecord[],
+  ) => {
+    const executionRows = await loadDeployExecutionFreshnessRows(projectId);
+    const recheckedEntityIds = new Set(
+      candidateEvents
+        .filter((event) => event.kind === "deploy_execution_rechecked" && event.entityId)
+        .map((event) => event.entityId as string),
+    );
+
+    return executionRows
+      .filter((row) => !row.retryOfExecutionRunId)
+      .filter((row) => row.transitionCount > 1 || row.lastCheckedAt !== null)
+      .filter((row) => !recheckedEntityIds.has(row.id))
+      .map((row) => row.id);
+  };
+
   let bestBundle = { context, events };
   let bestLatestEvent = latestTimelineEventOccurredAt(events);
+  let bestMissingRechecks = await listMissingRecheckedExecutionIds(context.project.id, events);
 
-  for (const waitMs of [450, 900]) {
+  if (bestMissingRechecks.length === 0) {
+    return bestBundle;
+  }
+
+  for (const waitMs of [450, 900, 1800, 3600]) {
     await delay(waitMs);
 
     const refreshedContext = await loadTimelineContextSupabase(workspaceSlug, projectSlug);
@@ -1473,19 +1540,30 @@ async function loadSupabaseTimelineBundleWithDeployFreshness(
 
     const refreshedEvents = await ensureBackfilledAuditEventsSupabase(refreshedContext);
     const latestRefreshedEvent = latestTimelineEventOccurredAt(refreshedEvents);
+    const refreshedMissingRechecks = await listMissingRecheckedExecutionIds(
+      refreshedContext.project.id,
+      refreshedEvents,
+    );
 
     if (
-      latestRefreshedEvent &&
-      (!bestLatestEvent ||
-        latestRefreshedEvent > bestLatestEvent ||
-        (latestRefreshedEvent === bestLatestEvent &&
-          refreshedEvents.length > bestBundle.events.length))
+      refreshedMissingRechecks.length < bestMissingRechecks.length ||
+      (refreshedMissingRechecks.length === bestMissingRechecks.length &&
+        latestRefreshedEvent &&
+        (!bestLatestEvent ||
+          latestRefreshedEvent > bestLatestEvent ||
+          (latestRefreshedEvent === bestLatestEvent &&
+            refreshedEvents.length > bestBundle.events.length)))
     ) {
       bestBundle = {
         context: refreshedContext,
         events: refreshedEvents,
       };
       bestLatestEvent = latestRefreshedEvent;
+      bestMissingRechecks = refreshedMissingRechecks;
+    }
+
+    if (bestMissingRechecks.length === 0) {
+      break;
     }
   }
 

@@ -3,6 +3,7 @@ const requiredEnvVars = [
   "SUPABASE_SERVICE_ROLE_KEY",
   "BESA_E2E_SUPABASE_OWNER_EMAIL",
   "BESA_E2E_SUPABASE_OWNER_PASSWORD",
+  "VERCEL_TOKEN",
 ];
 
 const missing = requiredEnvVars.filter((key) => {

@@ -48,6 +48,19 @@ import type {
   UpdateDeployTargetSettingsInput,
 } from "@/lib/deploy/types";
 
+async function appendDeployAuditEvent(...args: Parameters<typeof appendProjectAuditEvent>) {
+  try {
+    return await appendProjectAuditEvent(...args);
+  } catch (error) {
+    console.error("Deploy audit event could not be persisted.", {
+      eventId: args[0]?.id ?? null,
+      kind: args[0]?.kind ?? null,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
 function emptyStructuredPlan(): DeployRunRecord["sourcePlanSnapshot"] {
   return {
     productSummary: "",
@@ -759,7 +772,7 @@ async function recordDeployRunLocal(input: DeployRunPersistenceInput) {
 
   await writeLocalStore(store);
 
-  await appendProjectAuditEvent({
+  await appendDeployAuditEvent({
     id: `audit-deploy-run-${run.id}`,
     projectId: input.projectId,
     workspaceId: input.workspaceId,
@@ -883,7 +896,7 @@ async function recordDeployRunSupabase(input: DeployRunPersistenceInput) {
     throw new Error(targetError.message);
   }
 
-  await appendProjectAuditEvent({
+  await appendDeployAuditEvent({
     id: `audit-deploy-run-${runId}`,
     projectId: input.projectId,
     workspaceId: input.workspaceId,
@@ -945,7 +958,7 @@ async function updateDeployTargetSettingsLocal(input: UpdateDeployTargetSettings
   store.deployTargets[index] = updated;
   await writeLocalStore(store);
 
-  await appendProjectAuditEvent({
+  await appendDeployAuditEvent({
     id: `audit-deploy-target-${updated.id}-${updated.updatedAt}`,
     projectId: updated.projectId,
     workspaceId: updated.workspaceId,
@@ -997,7 +1010,7 @@ async function updateDeployTargetSettingsSupabase(input: UpdateDeployTargetSetti
   }
 
   const updated = mapDeployTargetRow(data as Record<string, unknown>);
-  await appendProjectAuditEvent({
+  await appendDeployAuditEvent({
     id: `audit-deploy-target-${updated.id}-${timestamp}`,
     projectId: updated.projectId,
     workspaceId: updated.workspaceId,
@@ -1043,7 +1056,7 @@ async function applyDeployTargetPresetLocal(input: ApplyDeployTargetPresetInput)
   store.deployTargets[index] = updated;
   await writeLocalStore(store);
 
-  await appendProjectAuditEvent({
+  await appendDeployAuditEvent({
     id: `audit-deploy-target-${updated.id}-${updated.updatedAt}`,
     projectId: updated.projectId,
     workspaceId: updated.workspaceId,
@@ -1107,7 +1120,7 @@ async function applyDeployTargetPresetSupabase(input: ApplyDeployTargetPresetInp
   }
 
   const updated = mapDeployTargetRow(data as Record<string, unknown>);
-  await appendProjectAuditEvent({
+  await appendDeployAuditEvent({
     id: `audit-deploy-target-${updated.id}-${timestamp}`,
     projectId: updated.projectId,
     workspaceId: updated.workspaceId,
@@ -1239,7 +1252,7 @@ async function prepareDeployReleaseHandoffLocal(input: PrepareDeployReleaseHando
   store.deployReleases[releaseIndex] = nextRelease;
   await writeLocalStore(store);
 
-  await appendProjectAuditEvent({
+  await appendDeployAuditEvent({
     id: `audit-deploy-release-handoff-${nextRelease.id}`,
     projectId: nextRelease.projectId,
     workspaceId: nextRelease.workspaceId,
@@ -1360,7 +1373,7 @@ async function prepareDeployReleaseHandoffSupabase(input: PrepareDeployReleaseHa
 
   const nextRelease = mapDeployReleaseRow(data as Record<string, unknown>);
 
-  await appendProjectAuditEvent({
+  await appendDeployAuditEvent({
     id: `audit-deploy-release-handoff-${nextRelease.id}`,
     projectId: nextRelease.projectId,
     workspaceId: nextRelease.workspaceId,
@@ -1426,7 +1439,7 @@ async function exportDeployReleaseSnapshotLocal(
     store.deployReleases[releaseIndex] = nextRelease;
     await writeLocalStore(store);
 
-    await appendProjectAuditEvent({
+    await appendDeployAuditEvent({
       id: `audit-deploy-release-export-${nextRelease.id}-${timestamp}`,
       projectId: nextRelease.projectId,
       workspaceId: nextRelease.workspaceId,
@@ -1523,7 +1536,7 @@ async function exportDeployReleaseSnapshotSupabase(
 
     const nextRelease = mapDeployReleaseRow(data as Record<string, unknown>);
 
-    await appendProjectAuditEvent({
+    await appendDeployAuditEvent({
       id: `audit-deploy-release-export-${nextRelease.id}-${timestamp}`,
       projectId: nextRelease.projectId,
       workspaceId: nextRelease.workspaceId,
@@ -1622,7 +1635,7 @@ async function executeDeployReleaseHandoffSimulationLocal(
   store.deployHandoffRuns.unshift(handoffRun);
   await writeLocalStore(store);
 
-  await appendProjectAuditEvent({
+  await appendDeployAuditEvent({
     id: `audit-deploy-handoff-run-${handoffRun.id}`,
     projectId: handoffRun.projectId,
     workspaceId: handoffRun.workspaceId,
@@ -1764,7 +1777,7 @@ async function executeDeployReleaseHandoffSimulationSupabase(
 
   const handoffRun = mapDeployHandoffRunRow(data as Record<string, unknown>);
 
-  await appendProjectAuditEvent({
+  await appendDeployAuditEvent({
     id: `audit-deploy-handoff-run-${handoffRun.id}`,
     projectId: handoffRun.projectId,
     workspaceId: handoffRun.workspaceId,
@@ -1826,18 +1839,6 @@ function buildExecutionStatusTransition(input: {
     summary: input.summary,
     createdAt: input.createdAt,
   };
-}
-
-function shouldAppendExecutionTransition(input: {
-  previousStatus: DeployExecutionRunRecord["status"];
-  nextStatus: DeployExecutionRunRecord["status"];
-  previousProviderStatus: string | null;
-  nextProviderStatus: string | null;
-}) {
-  return (
-    input.previousStatus !== input.nextStatus ||
-    input.previousProviderStatus !== input.nextProviderStatus
-  );
 }
 
 function buildHostedDeploymentMetadata(input: {
@@ -2145,7 +2146,7 @@ async function executeDeployReleaseLocal(
   });
   await writeLocalStore(store);
 
-  await appendProjectAuditEvent({
+  await appendDeployAuditEvent({
     id: `audit-deploy-execution-run-${executionRun.id}`,
     projectId: executionRun.projectId,
     workspaceId: executionRun.workspaceId,
@@ -2402,7 +2403,7 @@ async function executeDeployReleaseSupabase(
 
   const executionRun = mapDeployExecutionRunRow(data as Record<string, unknown>);
 
-  await appendProjectAuditEvent({
+  await appendDeployAuditEvent({
     id: `audit-deploy-execution-run-${executionRun.id}`,
     projectId: executionRun.projectId,
     workspaceId: executionRun.workspaceId,
@@ -2490,27 +2491,16 @@ async function recheckDeployExecutionRunLocal(input: RecheckDeployExecutionRunIn
     executionRun,
   });
   const updatedAt = nowIso();
-  const nextStatusTransitions = [...executionRun.statusTransitions];
-
-  if (
-    shouldAppendExecutionTransition({
-      previousStatus: executionRun.status,
-      nextStatus: result.status,
-      previousProviderStatus: executionRun.latestProviderStatus,
-      nextProviderStatus: result.latestProviderStatus,
-    })
-  ) {
-    nextStatusTransitions.push(
-      buildExecutionStatusTransition({
-        fromStatus: executionRun.status,
-        toStatus: result.status,
-        fromProviderStatus: executionRun.latestProviderStatus,
-        toProviderStatus: result.latestProviderStatus,
-        summary: result.summary,
-        createdAt: updatedAt,
-      }),
-    );
-  }
+  const nextStatusTransitions = executionRun.statusTransitions.concat(
+    buildExecutionStatusTransition({
+      fromStatus: executionRun.status,
+      toStatus: result.status,
+      fromProviderStatus: executionRun.latestProviderStatus,
+      toProviderStatus: result.latestProviderStatus,
+      summary: result.summary,
+      createdAt: updatedAt,
+    }),
+  );
 
   const hostedDeployment =
     result.status === "ready" && result.providerKey && result.providerLabel
@@ -2559,7 +2549,7 @@ async function recheckDeployExecutionRunLocal(input: RecheckDeployExecutionRunIn
   });
   await writeLocalStore(store);
 
-  await appendProjectAuditEvent({
+  await appendDeployAuditEvent({
     id: `audit-deploy-execution-recheck-${nextExecutionRun.id}-${updatedAt}`,
     projectId: nextExecutionRun.projectId,
     workspaceId: nextExecutionRun.workspaceId,
@@ -2666,27 +2656,16 @@ async function recheckDeployExecutionRunSupabase(input: RecheckDeployExecutionRu
     executionRun,
   });
   const updatedAt = nowIso();
-  const nextStatusTransitions = [...executionRun.statusTransitions];
-
-  if (
-    shouldAppendExecutionTransition({
-      previousStatus: executionRun.status,
-      nextStatus: result.status,
-      previousProviderStatus: executionRun.latestProviderStatus,
-      nextProviderStatus: result.latestProviderStatus,
-    })
-  ) {
-    nextStatusTransitions.push(
-      buildExecutionStatusTransition({
-        fromStatus: executionRun.status,
-        toStatus: result.status,
-        fromProviderStatus: executionRun.latestProviderStatus,
-        toProviderStatus: result.latestProviderStatus,
-        summary: result.summary,
-        createdAt: updatedAt,
-      }),
-    );
-  }
+  const nextStatusTransitions = executionRun.statusTransitions.concat(
+    buildExecutionStatusTransition({
+      fromStatus: executionRun.status,
+      toStatus: result.status,
+      fromProviderStatus: executionRun.latestProviderStatus,
+      toProviderStatus: result.latestProviderStatus,
+      summary: result.summary,
+      createdAt: updatedAt,
+    }),
+  );
 
   const hostedDeployment =
     result.status === "ready" && result.providerKey && result.providerLabel
@@ -2743,7 +2722,7 @@ async function recheckDeployExecutionRunSupabase(input: RecheckDeployExecutionRu
 
   const nextExecutionRun = mapDeployExecutionRunRow(data as Record<string, unknown>);
 
-  await appendProjectAuditEvent({
+  await appendDeployAuditEvent({
     id: `audit-deploy-execution-recheck-${nextExecutionRun.id}-${updatedAt}`,
     projectId: nextExecutionRun.projectId,
     workspaceId: nextExecutionRun.workspaceId,
@@ -2881,7 +2860,7 @@ async function promoteDeployReleaseLocal(input: PromoteDeployReleaseInput) {
 
   await writeLocalStore(store);
 
-  await appendProjectAuditEvent({
+  await appendDeployAuditEvent({
     id: `audit-deploy-release-${release.id}`,
     projectId: input.projectId,
     workspaceId: input.workspaceId,
@@ -3020,7 +2999,7 @@ async function promoteDeployReleaseSupabase(input: PromoteDeployReleaseInput) {
     throw new Error(targetError.message);
   }
 
-  await appendProjectAuditEvent({
+  await appendDeployAuditEvent({
     id: `audit-deploy-release-${release.id}`,
     projectId: input.projectId,
     workspaceId: input.workspaceId,
@@ -3200,17 +3179,18 @@ export async function getProjectDeployBundle(
   workspaceSlug: string,
   projectSlug: string,
 ): Promise<ProjectDeployBundle | null> {
-  const [planBundle, visualBundle, codeBundle, generationBundle, queueItems] = await Promise.all([
-    getProjectPlanBundle(workspaceSlug, projectSlug),
-    getProjectVisualBundle(workspaceSlug, projectSlug),
-    getProjectCodeBundle(workspaceSlug, projectSlug),
-    getProjectGenerationBundle(workspaceSlug, projectSlug),
-    listProjectBuilderRefreshQueue(workspaceSlug, projectSlug),
-  ]);
+  const planBundle = await getProjectPlanBundle(workspaceSlug, projectSlug);
 
   if (!planBundle) {
     return null;
   }
+
+  const [visualBundle, generationBundle, queueItems] = await Promise.all([
+    getProjectVisualBundle(workspaceSlug, projectSlug),
+    getProjectGenerationBundle(workspaceSlug, projectSlug),
+    listProjectBuilderRefreshQueue(workspaceSlug, projectSlug),
+  ]);
+  const codeBundle = await getProjectCodeBundle(workspaceSlug, projectSlug);
 
   const target = isSupabaseConfigured()
     ? await ensureProjectDeployTargetSupabase({

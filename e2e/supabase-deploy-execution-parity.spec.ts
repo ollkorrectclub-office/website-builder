@@ -11,6 +11,10 @@ const projectBasePath = e2eSupabaseDeployProjectBasePath || e2eProjectBasePath;
 const ownerEmail = process.env.BESA_E2E_SUPABASE_OWNER_EMAIL ?? "";
 const ownerPassword = process.env.BESA_E2E_SUPABASE_OWNER_PASSWORD ?? "";
 const deployStubBaseUrl = `http://127.0.0.1:${process.env.BESA_E2E_DEPLOY_STUB_PORT ?? "4022"}`;
+const deployExecutionRecheckedPattern =
+  e2eLocale === "sq" ? /Hosting execution u rikontrollua/i : /Hosting execution rechecked/i;
+const deployExecutionRetriedPattern =
+  e2eLocale === "sq" ? /Hosting execution u riprovua/i : /Hosting execution retried/i;
 
 function serializeDeployStubConfig() {
   return [
@@ -88,7 +92,7 @@ test.describe.serial("supabase deploy execution parity", () => {
     const recheckedCard = page
       .locator('[data-testid="timeline-event-card"][data-event-kind="deploy_execution_rechecked"]')
       .first();
-    await expect(recheckedCard).toContainText(/Hosting execution rechecked/i);
+    await expect(recheckedCard).toContainText(deployExecutionRecheckedPattern);
     await expect(recheckedCard.getByTestId("timeline-open-context")).toHaveAttribute(
       "href",
       new RegExp(`executionRun=${initialExecutionRunId}`),
@@ -109,7 +113,7 @@ test.describe.serial("supabase deploy execution parity", () => {
     const retriedCard = page
       .locator('[data-testid="timeline-event-card"][data-event-kind="deploy_execution_retried"]')
       .first();
-    await expect(retriedCard).toContainText(/Hosting execution retried/i);
+    await expect(retriedCard).toContainText(deployExecutionRetriedPattern);
     await expect(retriedCard.getByTestId("timeline-open-context")).toHaveAttribute(
       "href",
       new RegExp(`executionRun=${retriedExecutionRunId}`),

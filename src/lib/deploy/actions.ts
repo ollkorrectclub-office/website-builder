@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 
 import { assertProjectPermission } from "@/lib/auth/access";
 import { buildRuntimePreviewBundle } from "@/lib/builder/runtime-preview";
@@ -35,6 +36,12 @@ function permissionError(message: string): FormState {
     status: "error",
     message,
   };
+}
+
+function rethrowRedirectError(error: unknown) {
+  if (isRedirectError(error)) {
+    throw error;
+  }
 }
 
 function revalidateDeployRoutes(locale: string, workspaceSlug: string, projectSlug: string) {
@@ -157,6 +164,7 @@ export async function createDeploySnapshotAction(
       `${projectDeployRoute(locale, workspaceSlug, projectSlug)}?deployRun=${encodeURIComponent(persisted.run.id)}#deploy-run-${persisted.run.id}`,
     );
   } catch (error) {
+    rethrowRedirectError(error);
     return {
       status: "error",
       message: error instanceof Error ? error.message : "Deploy snapshot generation failed.",
@@ -345,6 +353,7 @@ export async function prepareDeployReleaseHandoffAction(
       `${projectDeployRoute(locale, workspaceSlug, projectSlug)}?deployRun=${encodeURIComponent(release.deployRunId)}&release=${encodeURIComponent(release.id)}#release-${release.id}`,
     );
   } catch (error) {
+    rethrowRedirectError(error);
     return {
       status: "error",
       message: error instanceof Error ? error.message : "Hosting handoff could not be prepared.",
@@ -405,6 +414,7 @@ export async function promoteDeployReleaseAction(
       `${projectDeployRoute(locale, workspaceSlug, projectSlug)}?deployRun=${encodeURIComponent(deployRunId)}&release=${encodeURIComponent(release.id)}#release-${release.id}`,
     );
   } catch (error) {
+    rethrowRedirectError(error);
     return {
       status: "error",
       message: error instanceof Error ? error.message : "Deploy release promotion failed.",
@@ -457,6 +467,7 @@ export async function executeDeployReleaseHandoffSimulationAction(
       `${projectDeployRoute(locale, workspaceSlug, projectSlug)}?deployRun=${encodeURIComponent(handoffRun.deployRunId)}&release=${encodeURIComponent(handoffRun.releaseId)}&handoffRun=${encodeURIComponent(handoffRun.id)}#handoff-run-${handoffRun.id}`,
     );
   } catch (error) {
+    rethrowRedirectError(error);
     return {
       status: "error",
       message:
@@ -512,6 +523,7 @@ export async function executeDeployReleaseAction(
       `${projectDeployRoute(locale, workspaceSlug, projectSlug)}?deployRun=${encodeURIComponent(executionRun.deployRunId)}&release=${encodeURIComponent(executionRun.releaseId)}&executionRun=${encodeURIComponent(executionRun.id)}#execution-run-${executionRun.id}`,
     );
   } catch (error) {
+    rethrowRedirectError(error);
     return {
       status: "error",
       message:
@@ -567,6 +579,7 @@ export async function recheckDeployExecutionRunAction(
       `${projectDeployRoute(locale, workspaceSlug, projectSlug)}?deployRun=${encodeURIComponent(executionRun.deployRunId)}&release=${encodeURIComponent(executionRun.releaseId)}&executionRun=${encodeURIComponent(executionRun.id)}#execution-run-${executionRun.id}`,
     );
   } catch (error) {
+    rethrowRedirectError(error);
     return {
       status: "error",
       message:
@@ -622,6 +635,7 @@ export async function retryDeployExecutionRunAction(
       `${projectDeployRoute(locale, workspaceSlug, projectSlug)}?deployRun=${encodeURIComponent(executionRun.deployRunId)}&release=${encodeURIComponent(executionRun.releaseId)}&executionRun=${encodeURIComponent(executionRun.id)}#execution-run-${executionRun.id}`,
     );
   } catch (error) {
+    rethrowRedirectError(error);
     return {
       status: "error",
       message:

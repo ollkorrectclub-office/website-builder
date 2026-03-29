@@ -18,7 +18,53 @@ function parseJsonBody(body) {
   }
 }
 
-function planningPayload() {
+function extractEnabledCapabilityKeys(promptInput) {
+  if (typeof promptInput !== "string" || promptInput.trim().length === 0) {
+    return [];
+  }
+
+  const briefMarker = "Project brief JSON:";
+  const briefIndex = promptInput.indexOf(briefMarker);
+
+  if (briefIndex >= 0) {
+    const rawJson = promptInput.slice(briefIndex + briefMarker.length).trim();
+
+    try {
+      const parsed = JSON.parse(rawJson);
+      const capabilities =
+        parsed && typeof parsed === "object" && parsed.capabilities && typeof parsed.capabilities === "object"
+          ? parsed.capabilities
+          : null;
+
+      if (capabilities) {
+        return Object.entries(capabilities)
+          .filter(([, enabled]) => enabled === true)
+          .map(([key]) => key);
+      }
+    } catch {
+      // Fall back to parsing the summary line.
+    }
+  }
+
+  const capabilityLine = promptInput
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.startsWith("Enabled capability keys:"));
+
+  if (!capabilityLine) {
+    return [];
+  }
+
+  return capabilityLine
+    .replace("Enabled capability keys:", "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function planningPayload(promptInput) {
+  const enabledCapabilities = extractEnabledCapabilityKeys(promptInput);
+
   return {
     summary: "External planner stub produced a launch-ready clinic plan with focused treatments and consultation flow.",
     plan: {
@@ -39,7 +85,7 @@ function planningPayload() {
     signals: {
       requestedPageCount: 4,
       resolvedPageCount: 4,
-      enabledCapabilities: ["analytics"],
+      enabledCapabilities: enabledCapabilities.length > 0 ? enabledCapabilities : ["booking"],
       notes: "External planner stub emphasized consultation funnel clarity.",
     },
   };
@@ -136,7 +182,7 @@ const server = http.createServer(async (request, response) => {
       ? generationPayload()
       : capability === "patch_suggestion"
         ? patchPayload()
-        : planningPayload();
+        : planningPayload(body?.input);
 
   sendJson(response, 200, {
     id: `resp_phase42_${capability}`,

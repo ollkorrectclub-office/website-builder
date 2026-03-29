@@ -25,6 +25,18 @@ function emptyCapabilities(): ProjectCapabilities {
   };
 }
 
+function samplePlanningCapabilities(): ProjectCapabilities {
+  return {
+    auth: false,
+    payments: false,
+    cms: false,
+    fileUpload: false,
+    aiChat: false,
+    calendar: false,
+    analytics: true,
+  };
+}
+
 function sampleSupportedLocales(): Array<"en" | "sq"> {
   return ["en"];
 }
@@ -222,7 +234,7 @@ async function verifyPlanning(resolved: ResolvedCapabilityAdapterConfig) {
       supportedLocales: sampleSupportedLocales(),
       country: "albania",
       businessCategory: "Healthcare",
-      capabilities: emptyCapabilities(),
+      capabilities: samplePlanningCapabilities(),
     },
     "project_rerun",
   );

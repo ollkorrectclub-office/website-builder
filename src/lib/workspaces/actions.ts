@@ -461,9 +461,15 @@ export async function createWorkspaceAction(
   const supportedLocales = parseSupportedLocales(formData);
 
   if (!name || !companyName || !businessCategory) {
+    const missingFields = [
+      !name ? "workspace name" : null,
+      !companyName ? "company name" : null,
+      !businessCategory ? "business category" : null,
+    ].filter((field): field is string => field !== null);
+
     return {
       status: "error",
-      message: "Please complete the required workspace fields before continuing.",
+      message: `Please complete the required workspace fields before continuing: ${missingFields.join(", ")}.`,
     };
   }
 

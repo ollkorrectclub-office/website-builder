@@ -25,9 +25,31 @@ export function WorkspaceCreateForm({
 }) {
   const [step, setStep] = useState(0);
   const [state, formAction] = useActionState(action, initialFormState);
+  const [draft, setDraft] = useState({
+    name: "",
+    companyName: "",
+    businessCategory: "",
+    country: "kosovo",
+    defaultLocale: locale,
+    supportedLocales: ["sq", "en"] as Array<"sq" | "en">,
+    intentNotes: "",
+  });
 
   const steps = [dictionary.onboarding.stepOne, dictionary.onboarding.stepTwo, dictionary.onboarding.stepThree];
   const isLastStep = step === steps.length - 1;
+
+  function toggleSupportedLocale(nextLocale: "sq" | "en", checked: boolean) {
+    setDraft((current) => {
+      const nextValues = checked
+        ? Array.from(new Set([nextLocale, ...current.supportedLocales]))
+        : current.supportedLocales.filter((value) => value !== nextLocale);
+
+      return {
+        ...current,
+        supportedLocales: nextValues.length > 0 ? nextValues : current.supportedLocales,
+      };
+    });
+  }
 
   return (
     <form action={formAction} className="mx-auto flex w-full max-w-5xl flex-col gap-6">
@@ -51,15 +73,34 @@ export function WorkspaceCreateForm({
           <div className="grid gap-5 sm:grid-cols-2">
             <label className="space-y-2">
               <span className="text-sm font-semibold text-foreground">{dictionary.onboarding.workspaceName}</span>
-              <input name="name" defaultValue="Studio North" className={baseInputClass} />
+              <input
+                value={draft.name}
+                onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+                placeholder="Your workspace name"
+                className={baseInputClass}
+              />
             </label>
             <label className="space-y-2">
               <span className="text-sm font-semibold text-foreground">{dictionary.onboarding.companyName}</span>
-              <input name="companyName" defaultValue="Studio North LLC" className={baseInputClass} />
+              <input
+                value={draft.companyName}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, companyName: event.target.value }))
+                }
+                placeholder="Your company or team name"
+                className={baseInputClass}
+              />
             </label>
             <label className="space-y-2 sm:col-span-2">
               <span className="text-sm font-semibold text-foreground">{dictionary.onboarding.businessCategory}</span>
-              <input name="businessCategory" defaultValue="Digital agency" className={baseInputClass} />
+              <input
+                value={draft.businessCategory}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, businessCategory: event.target.value }))
+                }
+                placeholder="Business category"
+                className={baseInputClass}
+              />
             </label>
           </div>
         ) : null}
@@ -68,7 +109,11 @@ export function WorkspaceCreateForm({
           <div className="grid gap-5 sm:grid-cols-2">
             <label className="space-y-2">
               <span className="text-sm font-semibold text-foreground">{dictionary.onboarding.country}</span>
-              <select name="country" defaultValue="kosovo" className={baseInputClass}>
+              <select
+                value={draft.country}
+                onChange={(event) => setDraft((current) => ({ ...current, country: event.target.value }))}
+                className={baseInputClass}
+              >
                 {countryOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label[locale]}
@@ -78,7 +123,16 @@ export function WorkspaceCreateForm({
             </label>
             <label className="space-y-2">
               <span className="text-sm font-semibold text-foreground">{dictionary.onboarding.defaultLanguage}</span>
-              <select name="defaultLocale" defaultValue={locale} className={baseInputClass}>
+              <select
+                value={draft.defaultLocale}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    defaultLocale: event.target.value === "en" ? "en" : "sq",
+                  }))
+                }
+                className={baseInputClass}
+              >
                 <option value="sq">Shqip</option>
                 <option value="en">English</option>
               </select>
@@ -87,11 +141,21 @@ export function WorkspaceCreateForm({
               <legend className="text-sm font-semibold text-foreground">{dictionary.onboarding.supportedLanguages}</legend>
               <div className="flex flex-wrap gap-3">
                 <label className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm">
-                  <input type="checkbox" name="supportedLocales" value="sq" defaultChecked />
+                  <input
+                    type="checkbox"
+                    value="sq"
+                    checked={draft.supportedLocales.includes("sq")}
+                    onChange={(event) => toggleSupportedLocale("sq", event.target.checked)}
+                  />
                   Shqip
                 </label>
                 <label className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm">
-                  <input type="checkbox" name="supportedLocales" value="en" defaultChecked />
+                  <input
+                    type="checkbox"
+                    value="en"
+                    checked={draft.supportedLocales.includes("en")}
+                    onChange={(event) => toggleSupportedLocale("en", event.target.checked)}
+                  />
                   English
                 </label>
               </div>
@@ -104,14 +168,25 @@ export function WorkspaceCreateForm({
             <label className="space-y-2">
               <span className="text-sm font-semibold text-foreground">{dictionary.onboarding.intentNotes}</span>
               <textarea
-                name="intentNotes"
-                defaultValue="We want to onboard clients, create structured project briefs, and prepare premium project shells for Kosovo and Albania."
+                value={draft.intentNotes}
+                onChange={(event) => setDraft((current) => ({ ...current, intentNotes: event.target.value }))}
+                placeholder="Describe your primary goals, workflows, and launch priorities."
                 className="min-h-40 w-full rounded-[24px] border border-border bg-background px-4 py-3 text-sm leading-7 outline-none transition focus:border-primary/50"
               />
             </label>
             <p className="text-sm leading-7 text-muted-foreground">{dictionary.onboarding.helper}</p>
           </div>
         ) : null}
+
+        <input type="hidden" name="name" value={draft.name} />
+        <input type="hidden" name="companyName" value={draft.companyName} />
+        <input type="hidden" name="businessCategory" value={draft.businessCategory} />
+        <input type="hidden" name="country" value={draft.country} />
+        <input type="hidden" name="defaultLocale" value={draft.defaultLocale} />
+        {draft.supportedLocales.map((supportedLocale) => (
+          <input key={supportedLocale} type="hidden" name="supportedLocales" value={supportedLocale} />
+        ))}
+        <input type="hidden" name="intentNotes" value={draft.intentNotes} />
 
         {state.status === "error" ? (
           <p className="mt-5 rounded-2xl border border-red-300/50 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
